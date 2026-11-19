@@ -12,6 +12,7 @@
  * paints every page. Run with no arguments; exits non-zero on the first failure.
  *
  *   deasynth-selftest [directory to write page snapshots into]
+ *   deasynth-selftest --write-patches <directory>     regenerate the starter patches
  */
 
 #include "../DeasynthProcessor.h"
@@ -114,6 +115,36 @@ void testAudio()
     p.processBlockBypassed(*std::make_unique<juce::AudioBuffer<float>>(2, 512),
                            *std::make_unique<juce::MidiBuffer>());
     check(true, "bypass does not crash");
+}
+
+void testOscillators()
+{
+    std::cout << "Oscillator algorithms" << std::endl;
+    DeasynthProcessor p;
+    if (!p.surge)
+        return;
+    p.prepareToPlay(48000.0, 512);
+    auto &type = p.surge->storage.getPatch().scene[0].osc[0].type;
+
+    for (int t = 0; t < n_osc_types; ++t)
+    {
+        if (t == ot_audioinput)
+            continue; // Deasynth has no audio input
+        p.surge->setParameter01(p.surge->idForParameter(&type),
+                                Parameter::intScaledToFloat(t, type.val_max.i, type.val_min.i), false,
+                                true);
+        render(p, 2); // the swap happens on the audio thread
+        std::cout << "        " << osc_type_names[t] << "..." << std::flush;
+        auto on = noteOn(52);
+        auto r = render(p, 30, &on);
+        auto off = noteOff(52);
+        render(p, 120, &off);
+        std::cout << "\r";
+        check(type.val.i == t && r.finite && r.peak < 4.f,
+              std::string(osc_type_names[t]) + " plays (rms " + std::to_string(r.rms) + ", peak " +
+                  std::to_string(r.peak) + ", type " + std::to_string(type.val.i) +
+                  (r.finite ? ")" : ", NOT FINITE)"));
+    }
 }
 
 void testAnalogStage()
@@ -375,11 +406,17 @@ void testEditor(const juce::String &snapshotDir)
 }
 } // namespace
 
+int writeDeasynthPatches(const juce::String &directory); // presetgen.cpp
+
 int main(int argc, char **argv)
 {
     juce::ScopedJuceInitialiser_GUI gui;
 
+    if (argc > 2 && juce::String(argv[1]) == "--write-patches")
+        return writeDeasynthPatches(argv[2]);
+
     testAudio();
+    testOscillators();
     testAnalogStage();
     testVintage();
     testState();

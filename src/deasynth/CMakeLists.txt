@@ -122,6 +122,7 @@ if(DEASYNTH_BUILD_SELFTEST)
   juce_add_console_app(deasynth-selftest PRODUCT_NAME "deasynth-selftest")
   target_sources(deasynth-selftest PRIVATE
     tests/selftest.cpp
+    tests/presetgen.cpp
     DeasynthProcessor.cpp
     gui/DeasynthEditor.cpp
     gui/Displays.cpp

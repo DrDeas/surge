@@ -1,0 +1,121 @@
+name: "Deasynth"
+
+# Builds Deasynth and runs its checks:
+#   macOS  universal standalone app, Audio Unit and VST3; self-test; Apple's auval
+#   Linux  standalone; self-test
+#
+# The macOS products are uploaded as an artifact. They are ad-hoc signed, which is fine on
+# the Mac that built them but not for a downloaded copy: see doc/Deasynth.md.
+
+on:
+  push:
+    branches:
+      - main
+      - "claude/**"
+    paths:
+      - "src/deasynth/**"
+      - "src/common/**"
+      - "src/CMakeLists.txt"
+      - "scripts/deasynth/**"
+      - "resources/deasynth/**"
+      - ".github/workflows/deasynth.yml"
+  pull_request:
+    paths:
+      - "src/deasynth/**"
+      - "src/common/**"
+      - "src/CMakeLists.txt"
+      - "scripts/deasynth/**"
+      - "resources/deasynth/**"
+      - ".github/workflows/deasynth.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deasynth-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  macos:
+    name: macOS (app, Audio Unit, VST3)
+    runs-on: macos-14
+    timeout-minutes: 120
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install build tools
+        run: brew install ninja
+
+      - name: Build, sign ad-hoc, install and validate
+        run: scripts/deasynth/build-mac.sh --install
+
+      - name: Show Audio Unit validation result
+        if: always()
+        run: |
+          if [[ -f build-deasynth/auval.log ]]; then tail -60 build-deasynth/auval.log; fi
+
+      - name: Check the bundles
+        run: |
+          ART=build-deasynth/src/deasynth/deasynth_artefacts
+          [[ -d "$ART/Release" ]] && ART="$ART/Release"
+          lipo -archs "$ART/AU/Deasynth.component/Contents/MacOS/Deasynth"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$ART/AU/Deasynth.component/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :AudioComponents" "$ART/AU/Deasynth.component/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "$ART/Standalone/Deasynth.app/Contents/Info.plist"
+          mkdir -p dist
+          for p in Standalone/Deasynth.app AU/Deasynth.component VST3/Deasynth.vst3; do
+            ditto -c -k --keepParent "$ART/$p" "dist/$(basename "$p").zip"
+          done
+
+      - name: Upload macOS products
+        uses: actions/upload-artifact@v4
+        with:
+          name: deasynth-macos
+          path: dist/*.zip
+          if-no-files-found: error
+
+  linux:
+    name: Linux (standalone, self-test)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build xvfb libasound2-dev libjack-jackd2-dev \
+            libx11-dev libxext-dev libxrandr-dev libxinerama-dev libxcursor-dev \
+            libfreetype-dev libfontconfig1-dev libgl1-mesa-dev \
+            libxcb-cursor-dev libxcb-keysyms1-dev libxcb-util-dev \
+            libxkbcommon-dev libxkbcommon-x11-dev libcairo2-dev
+
+      - name: Build
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DSURGE_BUILD_XT=OFF -DSURGE_BUILD_FX=OFF \
+            -DSURGE_BUILD_TESTRUNNER=OFF -DSURGE_BUILD_CLAP=OFF -DENABLE_LTO=OFF
+          cmake --build build --target deasynth_Standalone deasynth_VST3 deasynth-selftest
+
+      - name: Self-test
+        run: |
+          mkdir -p snapshots
+          xvfb-run -a build/deasynth-selftest snapshots
+
+      - name: Upload interface snapshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: deasynth-interface-snapshots
+          path: snapshots/*.png
+          if-no-files-found: error

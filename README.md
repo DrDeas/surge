@@ -19,6 +19,12 @@ If you would also like to participate in discussions, testing and design of Surg
 
 This readme serves as the root of developer documentation for Surge XT.
 
+> [!NOTE]
+> This fork also contains **Deasynth**, a synthesizer with its own interface built on the Surge XT
+> engine. It builds as a standalone app and as an Audio Unit for Logic Pro (and as a VST3). On a Mac,
+> `scripts/deasynth/build-mac.sh --install` builds, signs and installs it. See
+> [doc/Deasynth.md](doc/Deasynth.md).
+
 # Developing Surge XT
 
 We welcome developers! Our workflow revolves around GitHub issues in this repository and conversations at our Discord

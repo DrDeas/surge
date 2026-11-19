@@ -236,7 +236,9 @@ struct PresetBrowser::CategoryModel : juce::ListBoxModel
             g.drawText(e.label.toUpperCase(), 10, 4, w - 20, h - 4, juce::Justification::bottomLeft);
             return;
         }
-        const bool sel = row == owner.selectedCategoryRow;
+        // while a search is active the results come from every category
+        const bool searching = owner.search.getText().trim().isNotEmpty();
+        const bool sel = searching ? row == 0 : row == owner.selectedCategoryRow;
         if (sel)
         {
             g.setColour(theme::osc.withAlpha(0.18f));
@@ -292,6 +294,7 @@ struct PresetBrowser::PatchModel : juce::ListBoxModel
         {
             owner.editor.loadPatch(owner.patches[(size_t)row]);
             owner.patchList.repaint();
+            owner.search.grabKeyboardFocus();
         }
     }
     void listBoxItemDoubleClicked(int row, const juce::MouseEvent &e) override
@@ -310,6 +313,9 @@ PresetBrowser::PresetBrowser(DeasynthEditor &ed, EditorContext &c) : editor(ed),
     patchList.setModel(patchModel.get());
     categoryList.setRowHeight(27);
     patchList.setRowHeight(27);
+    // typing always goes to the search box, and Escape always reaches the browser
+    categoryList.setWantsKeyboardFocus(false);
+    patchList.setWantsKeyboardFocus(false);
 
     search.setFont(theme::font(14.f));
     search.setTextToShowWhenEmpty("Search all patches", theme::textFaint);
@@ -396,6 +402,7 @@ void PresetBrowser::selectCategory(int row)
 
 void PresetBrowser::rebuildPatches()
 {
+    categoryList.repaint();
     auto &storage = ctx.synth->storage;
     patches.clear();
     const auto query = search.getText().trim();
