@@ -203,6 +203,15 @@ SurgeVoice::SurgeVoice(SurgeStorage *storage, SurgeSceneStorage *oscene, pdata *
     state.scene_id = scene_id;
     state.detune = detune;
     state.uberrelease = false;
+
+    {
+        // Vintage voice variance: up to +/- 12 cents of pitch and +/- 4 semitones of cutoff
+        // at full amount, with a squared response so that the low end of the control is subtle.
+        const float va = std::clamp(storage->vintageAmount.load(), 0.f, 1.f);
+        const float vs = va * va;
+        state.vintagePitch = vs > 0.f ? storage->rand_pm1() * 0.12f * vs : 0.f;
+        state.vintageCutoff = vs > 0.f ? storage->rand_pm1() * 4.f * vs : 0.f;
+    }
     state.keyState = keyState;
     state.mainChannelState = mainChannelState;
     state.voiceChannelState = voiceChannelState;
@@ -505,7 +514,7 @@ void SurgeVoice::switch_toggled()
     // scenepbpitch is pitch state but without state.pkey, so that it can be used to add
     // scene pitch/octave, pitch bend and associated modulations to non-keytracked oscillators
     state.scenepbpitch = pb + localcopy[pitch_id].f * (scene->pitch.extend_range ? 12.f : 1.f) +
-                         (octaveSize * localcopy[octave_id].i);
+                         (octaveSize * localcopy[octave_id].i) + state.vintagePitch;
     state.pitch = state.pkey + state.scenepbpitch;
 
     modsources[ms_keytrack]->set_output(0, (state.pitch - (float)scene->keytrack_root.val.i) *
@@ -824,7 +833,7 @@ template <bool first> void SurgeVoice::calc_ctrldata(QuadFilterChainState *Q, in
     }
 
     state.scenepbpitch = pb + localcopy[pitch_id].f * (scene->pitch.extend_range ? 12.f : 1.f) +
-                         (octaveSize * localcopy[octave_id].i);
+                         (octaveSize * localcopy[octave_id].i) + state.vintagePitch;
     state.pitch = state.pkey + state.scenepbpitch;
 
     // I didn't change this for octaveSize, I think rightly
@@ -1460,9 +1469,13 @@ void SurgeVoice::SetQFB(QuadFilterChainState *Q, int e) // Q == 0 means init(ial
         float keytrack = state.pitch - (float)scene->keytrack_root.val.i;
         float fenv = modsources[ms_filtereg]->get_output(0);
         float cutoffA =
-            localcopy[id_cfa].f + localcopy[id_kta].f * keytrack + localcopy[id_emoda].f * fenv;
+            localcopy[id_cfa].f + localcopy[id_kta].f * keytrack + localcopy[id_emoda].f * fenv +
+            state.vintageCutoff;
         float cutoffB =
             localcopy[id_cfb].f + localcopy[id_ktb].f * keytrack + localcopy[id_emodb].f * fenv;
+
+        if (!scene->f2_cutoff_is_offset.val.b)
+            cutoffB += state.vintageCutoff;
 
         if (scene->f2_cutoff_is_offset.val.b)
             cutoffB += cutoffA;

@@ -68,6 +68,12 @@ using namespace std;
 
 std::string SurgeStorage::skipPatchLoadDataPathSentinel = "<SKIP-PATCH-SENTINEL>";
 
+SurgeStorage::ProductIdentity &SurgeStorage::productIdentity()
+{
+    static ProductIdentity identity;
+    return identity;
+}
+
 SurgeStorage::SurgeStorage(const SurgeStorage::SurgeStorageConfig &config) : otherscene_clients(0)
 {
     wtGenService = std::make_unique<Surge::WavetableScript::WtGenService>(this);
@@ -177,12 +183,13 @@ SurgeStorage::SurgeStorage(const SurgeStorage::SurgeStorageConfig &config) : oth
         suppliedDataPath = buildOverrideDataPath;
     }
 
-    std::string sxt = "Surge XT";
-    std::string sxtlower = "surge-xt";
+    const auto &ident = productIdentity();
+    std::string sxt = ident.name;
+    std::string sxtlower = ident.lowerName;
 
     // Set up the local app data path for storing app-level config
     localAppDataPath = sst::plugininfra::paths::bestLibrarySharedVendorFolderPathFor(
-        "Surge Synth Team", "Surge XT", true);
+        ident.vendor, ident.name, true);
     userDataPath = getOverridenUserPath();
 
     bool isFactoryPortable{false};
@@ -224,7 +231,7 @@ SurgeStorage::SurgeStorage(const SurgeStorage::SurgeStorageConfig &config) : oth
 
         while (datapath.empty() && cp.has_parent_path() && cp != cp.parent_path())
         {
-            auto portable = cp / "SurgeXTData";
+            auto portable = cp / ident.portableDataDir;
 
             if (fs::is_directory(portable))
             {
@@ -267,7 +274,7 @@ SurgeStorage::SurgeStorage(const SurgeStorage::SurgeStorageConfig &config) : oth
 
     while (userDataPath.empty() && up.has_parent_path() && up != up.parent_path())
     {
-        auto portable = up / "SurgeXTUserData";
+        auto portable = up / ident.portableUserDir;
 
         if (fs::is_directory(portable))
         {
@@ -293,7 +300,7 @@ SurgeStorage::SurgeStorage(const SurgeStorage::SurgeStorageConfig &config) : oth
 
         while (datapath.empty() && cp.has_parent_path() && cp != cp.parent_path())
         {
-            auto portable = cp / L"SurgeXTData";
+            auto portable = cp / ident.portableDataDir;
 
             if (fs::is_directory(portable))
             {
@@ -324,7 +331,7 @@ SurgeStorage::SurgeStorage(const SurgeStorage::SurgeStorageConfig &config) : oth
 
     while (userDataPath.empty() && cp.has_parent_path() && cp != cp.parent_path())
     {
-        auto portable = cp / L"SurgeXTUserData";
+        auto portable = cp / ident.portableUserDir;
 
         if (fs::is_directory(portable))
         {
@@ -384,7 +391,7 @@ SurgeStorage::SurgeStorage(const SurgeStorage::SurgeStorageConfig &config) : oth
     initializeUserDataPaths();
 
     userDefaultsProvider = std::make_unique<Surge::Storage::UserDefaultsProvider>(
-        userDataPath, "SurgeXT", Surge::Storage::defaultKeyToString,
+        userDataPath, ident.defaultsName, Surge::Storage::defaultKeyToString,
         [this](auto &a, auto &b) { reportError(a, b); });
 
     extraThirdPartyWavetablesPath = config.extraThirdPartyWavetablesPath;

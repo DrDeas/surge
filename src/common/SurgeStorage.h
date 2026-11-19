@@ -1572,6 +1572,31 @@ class alignas(16) SurgeStorage
             return r;
         }
     };
+
+    /*
+     * Product identity. Surge XT and products derived from the same engine (such as Deasynth)
+     * keep their factory data, user documents and preferences in separate, product named
+     * folders. A derived product sets this once, before constructing its first SurgeStorage.
+     * The defaults are the Surge XT values, so Surge XT itself is unaffected.
+     */
+    struct ProductIdentity
+    {
+        std::string name{"Surge XT"};            // shared data + documents folder name
+        std::string lowerName{"surge-xt"};       // lower case data folder (Linux)
+        std::string vendor{"Surge Synth Team"};  // vendor folder for app-level config
+        std::string portableDataDir{"SurgeXTData"};
+        std::string portableUserDir{"SurgeXTUserData"};
+        std::string defaultsName{"SurgeXT"};     // user defaults file prefix
+    };
+    static ProductIdentity &productIdentity();
+
+    /*
+     * Vintage voice variance, 0...1. Each new voice draws its own small random offsets for
+     * oscillator pitch and filter cutoff, scaled by this amount, emulating the component
+     * tolerances between the voice cards of a vintage polysynth. 0 (the default) disables it.
+     */
+    std::atomic<float> vintageAmount{0.f};
+
     SurgeStorage(const SurgeStorageConfig &);
     SurgeStorage(std::string suppliedDataPath = "")
         : SurgeStorage(SurgeStorageConfig::fromDataPath(suppliedDataPath))

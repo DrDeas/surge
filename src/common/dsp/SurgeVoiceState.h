@@ -30,6 +30,9 @@ struct SurgeVoiceState
     bool gate;
     bool keep_playing, uberrelease;
     float pitch, scenepbpitch, fvel, pkey, priorpkey, detune, freleasevel, tunedkey;
+    // Per-voice vintage variance offsets, drawn once at note on from storage->vintageAmount.
+    // Pitch is in semitones, cutoff is in semitones. Both are zero when the feature is off.
+    float vintagePitch{0.f}, vintageCutoff{0.f};
     MidiKeyState *keyState;
     MidiChannelState *mainChannelState;
     MidiChannelState *voiceChannelState;

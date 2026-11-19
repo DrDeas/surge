@@ -1,0 +1,392 @@
+/*
+ * Deasynth - an analog-voiced hybrid synthesizer built on the Surge XT engine.
+ *
+ * Deasynth is released under the GNU General Public Licence v3 or later (GPL-3.0-or-later).
+ * The license is found in the "LICENSE" file in the root of this repository, or at
+ * https://www.gnu.org/licenses/gpl-3.0.en.html
+ */
+
+/*
+ * A self-contained check of the parts of Deasynth that are its own: the processor wrapper,
+ * session state, the voice variance and the output stage, and that the editor builds and
+ * paints every page. Run with no arguments; exits non-zero on the first failure.
+ *
+ *   deasynth-selftest [directory to write page snapshots into]
+ */
+
+#include "../DeasynthProcessor.h"
+#include "../gui/DeasynthEditor.h"
+
+#include <cmath>
+#include <iostream>
+
+namespace
+{
+int failures = 0;
+
+void check(bool ok, const std::string &what)
+{
+    std::cout << (ok ? "  ok    " : "  FAIL  ") << what << std::endl;
+    if (!ok)
+        ++failures;
+}
+
+struct Rendered
+{
+    float peak{0.f};
+    double rms{0.0};
+    bool finite{true};
+};
+
+Rendered render(DeasynthProcessor &p, int blocks, juce::MidiBuffer *firstBlockMidi = nullptr,
+                int blockSize = 512)
+{
+    Rendered r;
+    juce::AudioBuffer<float> buf(2, blockSize);
+    double sum = 0.0;
+    for (int b = 0; b < blocks; ++b)
+    {
+        buf.clear();
+        juce::MidiBuffer midi;
+        if (b == 0 && firstBlockMidi)
+            midi = *firstBlockMidi;
+        p.processBlock(buf, midi);
+        for (int c = 0; c < 2; ++c)
+        {
+            for (int i = 0; i < blockSize; ++i)
+            {
+                const float v = buf.getSample(c, i);
+                if (!std::isfinite(v))
+                    r.finite = false;
+                r.peak = std::max(r.peak, std::abs(v));
+                sum += (double)v * v;
+            }
+        }
+    }
+    r.rms = std::sqrt(sum / (2.0 * blocks * blockSize));
+    return r;
+}
+
+juce::MidiBuffer noteOn(int note, int vel = 100)
+{
+    juce::MidiBuffer m;
+    m.addEvent(juce::MidiMessage::noteOn(1, note, (juce::uint8)vel), 0);
+    return m;
+}
+
+juce::MidiBuffer noteOff(int note)
+{
+    juce::MidiBuffer m;
+    m.addEvent(juce::MidiMessage::noteOff(1, note), 0);
+    return m;
+}
+
+void testAudio()
+{
+    std::cout << "Audio path" << std::endl;
+    DeasynthProcessor p;
+    check(p.surge != nullptr, "engine starts (" + p.fatalErrorMessage + ")");
+    if (!p.surge)
+        return;
+    p.prepareToPlay(48000.0, 512);
+
+    auto silent = render(p, 8);
+    check(silent.peak == 0.f, "silent with no notes held");
+
+    auto on = noteOn(48);
+    auto playing = render(p, 40, &on);
+    check(playing.finite, "output is finite");
+    check(playing.rms > 0.01, "a held note makes sound (rms " + std::to_string(playing.rms) + ")");
+    check(playing.peak < 2.f, "level is sane (peak " + std::to_string(playing.peak) + ")");
+
+    auto off = noteOff(48);
+    render(p, 400, &off); // let the release and tail finish
+    auto after = render(p, 8);
+    check(after.peak < 1e-4f, "returns to silence after release");
+
+    // odd host block sizes must not disturb the 32 sample engine blocks
+    auto on2 = noteOn(60);
+    auto odd = render(p, 60, &on2, 37);
+    check(odd.finite && odd.rms > 0.01, "works with a 37 sample host buffer");
+    auto off2 = noteOff(60);
+    render(p, 600, &off2, 37);
+
+    p.processBlockBypassed(*std::make_unique<juce::AudioBuffer<float>>(2, 512),
+                           *std::make_unique<juce::MidiBuffer>());
+    check(true, "bypass does not crash");
+}
+
+void testAnalogStage()
+{
+    std::cout << "Output stage (Warmth)" << std::endl;
+    deasynth::AnalogStage stage;
+    stage.setSampleRate(48000.0);
+
+    // amount 0 must be bit transparent
+    float L alignas(16)[BLOCK_SIZE], R alignas(16)[BLOCK_SIZE], ref[BLOCK_SIZE];
+    double phase = 0.0;
+    auto fill = [&](float amp) {
+        for (int i = 0; i < BLOCK_SIZE; ++i)
+        {
+            L[i] = R[i] = ref[i] = amp * (float)std::sin(phase);
+            phase += 2.0 * M_PI * 220.0 / 48000.0;
+        }
+    };
+    bool transparent = true;
+    for (int b = 0; b < 20; ++b)
+    {
+        fill(0.7f);
+        stage.process(L, R, 0.f);
+        for (int i = 0; i < BLOCK_SIZE; ++i)
+            transparent = transparent && L[i] == ref[i] && R[i] == ref[i];
+    }
+    check(transparent, "amount 0 passes audio through untouched");
+
+    // full amount: bounded, finite, adds harmonics, leaves no DC
+    double sum = 0.0, sumSq = 0.0, fund = 0.0, fundQ = 0.0, refSq = 0.0;
+    float peak = 0.f;
+    bool finite = true;
+    int n = 0;
+    double ph2 = 0.0;
+    phase = 0.0;
+    for (int b = 0; b < 600; ++b)
+    {
+        fill(0.7f);
+        stage.process(L, R, 1.f);
+        for (int i = 0; i < BLOCK_SIZE; ++i, ph2 += 2.0 * M_PI * 220.0 / 48000.0)
+        {
+            if (b < 200)
+                continue; // settle
+            finite = finite && std::isfinite(L[i]);
+            peak = std::max(peak, std::abs(L[i]));
+            sum += L[i];
+            sumSq += (double)L[i] * L[i];
+            refSq += (double)ref[i] * ref[i];
+            fund += L[i] * std::sin(ph2);
+            fundQ += L[i] * std::cos(ph2);
+            ++n;
+        }
+    }
+    const double total = sumSq / n;
+    const double fundPower = 2.0 * ((fund / n) * (fund / n) + (fundQ / n) * (fundQ / n));
+    const double thd = std::sqrt(std::max(0.0, total - fundPower) / total);
+    check(finite, "full amount stays finite");
+    check(peak < 1.5f, "full amount stays bounded (peak " + std::to_string(peak) + ")");
+    check(thd > 0.05, "full amount adds harmonics (THD " + std::to_string(thd) + ")");
+    check(std::abs(sum / n) < 0.01, "no DC offset at the output (" + std::to_string(sum / n) + ")");
+    const double gainDb = 10.0 * std::log10(total / (refSq / n));
+    check(std::abs(gainDb) < 6.0, "loudness stays within 6 dB (" + std::to_string(gainDb) + " dB)");
+}
+
+void testVintage()
+{
+    std::cout << "Voice variance (Vintage)" << std::endl;
+    DeasynthProcessor p;
+    if (!p.surge)
+        return;
+    p.prepareToPlay(48000.0, 512);
+
+    auto spread = [&](float amount) {
+        *p.vintageParam = amount;
+        juce::MidiBuffer m;
+        for (int i = 0; i < 8; ++i)
+            m.addEvent(juce::MidiMessage::noteOn(1, 48 + i * 2, (juce::uint8)100), 0);
+        render(p, 2, &m);
+        float maxPitch = 0.f, maxCut = 0.f;
+        int count = 0;
+        bool allSame = true;
+        float first = 0.f;
+        for (auto *v : p.surge->voices[0])
+        {
+            if (count == 0)
+                first = v->state.vintagePitch;
+            allSame = allSame && v->state.vintagePitch == first;
+            maxPitch = std::max(maxPitch, std::abs(v->state.vintagePitch));
+            maxCut = std::max(maxCut, std::abs(v->state.vintageCutoff));
+            ++count;
+        }
+        juce::MidiBuffer offs;
+        for (int i = 0; i < 8; ++i)
+            offs.addEvent(juce::MidiMessage::noteOff(1, 48 + i * 2), 0);
+        render(p, 600, &offs);
+        return std::make_tuple(count, maxPitch, maxCut, allSame);
+    };
+
+    auto [n0, pitch0, cut0, same0] = spread(0.f);
+    check(n0 == 8, "eight voices allocated");
+    check(pitch0 == 0.f && cut0 == 0.f, "amount 0 leaves every voice exact");
+
+    auto [n1, pitch1, cut1, same1] = spread(1.f);
+    check(n1 == 8 && !same1, "full amount gives each voice its own offset");
+    check(pitch1 > 0.f && pitch1 <= 0.12f, "pitch spread within +/- 12 cents (" + std::to_string(pitch1 * 100.f) + ")");
+    check(cut1 > 0.f && cut1 <= 4.f, "cutoff spread within +/- 4 semitones (" + std::to_string(cut1) + ")");
+}
+
+void testState()
+{
+    std::cout << "Session state" << std::endl;
+    juce::MemoryBlock saved;
+    float cutoff = 0.f;
+    {
+        DeasynthProcessor a;
+        if (!a.surge)
+            return;
+        a.prepareToPlay(48000.0, 512);
+        auto &scene = a.surge->storage.getPatch().scene[0];
+        a.surge->setParameter01(a.surge->idForParameter(&scene.filterunit[0].cutoff), 0.31f);
+        cutoff = scene.filterunit[0].cutoff.val.f;
+        a.surge->setMacroParameter01(2, 0.66f);
+        *a.vintageParam = 0.77f;
+        *a.warmthParam = 0.42f;
+        a.editorState.page = 2;
+        render(a, 4);
+        a.getStateInformation(saved);
+    }
+    check(saved.getSize() > 64, "state is written");
+
+    {
+        DeasynthProcessor b;
+        b.prepareToPlay(48000.0, 512);
+        b.setStateInformation(saved.getData(), (int)saved.getSize());
+        render(b, 4);
+        auto &scene = b.surge->storage.getPatch().scene[0];
+        check(std::abs(scene.filterunit[0].cutoff.val.f - cutoff) < 1e-4f, "engine parameters restored");
+        check(std::abs(b.surge->getMacroParameterTarget01(2) - 0.66f) < 1e-3f, "macros restored");
+        check(std::abs(b.vintageParam->get() - 0.77f) < 1e-5f, "Vintage restored");
+        check(std::abs(b.warmthParam->get() - 0.42f) < 1e-5f, "Warmth restored");
+        check(b.editorState.page == 2, "editor page restored");
+        check(b.surge->storage.getPatch().scene[0].filterunit[0].type.val.i ==
+                  sst::filters::FilterType::fut_vintageladder,
+              "filter model restored");
+
+        // a second save of the restored instance must restore identically
+        juce::MemoryBlock again;
+        b.getStateInformation(again);
+        DeasynthProcessor c;
+        c.prepareToPlay(48000.0, 512);
+        c.setStateInformation(again.getData(), (int)again.getSize());
+        render(c, 4);
+        check(std::abs(c.surge->storage.getPatch().scene[0].filterunit[0].cutoff.val.f - cutoff) < 1e-4f,
+              "state survives a second round trip");
+    }
+
+    {
+        // damaged data must be rejected without disturbing the instance
+        DeasynthProcessor d;
+        d.prepareToPlay(48000.0, 512);
+        *d.vintageParam = 0.5f;
+        const float before = d.surge->storage.getPatch().scene[0].filterunit[0].cutoff.val.f;
+        d.setStateInformation(saved.getData(), 40); // header says more than is there
+        d.setStateInformation(saved.getData(), 3);
+        d.setStateInformation(nullptr, 0);
+        juce::MemoryBlock junk(4096, true);
+        for (size_t i = 0; i < junk.getSize(); ++i)
+            junk[i] = (char)(i * 131 + 7);
+        d.setStateInformation(junk.getData(), (int)junk.getSize());
+        auto on = noteOn(50);
+        auto r = render(d, 20, &on);
+        check(r.finite && r.rms > 0.005, "still plays after being handed damaged state");
+        check(d.vintageParam->get() == 0.5f, "truncated state leaves settings alone");
+        check(d.surge->storage.getPatch().scene[0].filterunit[0].cutoff.val.f == before,
+              "truncated state leaves the patch alone");
+    }
+}
+
+void testParameters()
+{
+    std::cout << "Host parameters" << std::endl;
+    DeasynthProcessor p;
+    if (!p.surge)
+        return;
+    auto &params = p.getParameters();
+    check(params.size() > 500, "engine parameters are exposed (" + std::to_string(params.size()) + ")");
+
+    bool namesOk = true, rangeOk = true;
+    std::set<juce::String> ids;
+    bool unique = true;
+    for (auto *ap : params)
+    {
+        namesOk = namesOk && ap->getName(64).isNotEmpty();
+        const float v = ap->getValue();
+        rangeOk = rangeOk && v >= 0.f && v <= 1.f && std::isfinite(v);
+        if (auto *wid = dynamic_cast<juce::AudioProcessorParameterWithID *>(ap))
+            unique = unique && ids.insert(wid->paramID).second;
+    }
+    check(namesOk, "every parameter has a name");
+    check(rangeOk, "every parameter reports a value in 0...1");
+    check(unique, "parameter identifiers are unique");
+
+    auto &cut = p.surge->storage.getPatch().scene[0].filterunit[0].cutoff;
+    auto *hp = p.hostParamFor(&cut);
+    check(hp != nullptr, "engine parameters map to host parameters");
+    if (hp)
+    {
+        hp->setValueNotifyingHost(0.8f);
+        check(std::abs(cut.get_value_f01() - 0.8f) < 1e-3f, "host automation reaches the engine");
+        check(hp->getText(0.8f, 32).isNotEmpty(), "values have display text");
+    }
+}
+
+void testEditor(const juce::String &snapshotDir)
+{
+    std::cout << "Editor" << std::endl;
+    DeasynthProcessor p;
+    if (!p.surge)
+        return;
+    p.prepareToPlay(48000.0, 512);
+
+    std::unique_ptr<juce::AudioProcessorEditor> base(p.createEditor());
+    auto *ed = dynamic_cast<DeasynthEditor *>(base.get());
+    check(ed != nullptr, "editor is created");
+    if (!ed)
+        return;
+    check(ed->getWidth() == DeasynthEditor::baseWidth && ed->getHeight() == DeasynthEditor::baseHeight,
+          "opens at its design size");
+
+    static const char *names[] = {"synth", "modulation", "effects"};
+    for (int pg = 0; pg < DeasynthEditor::numPages; ++pg)
+    {
+        ed->setPage(pg);
+        auto img = ed->createComponentSnapshot(ed->getLocalBounds(), true, 1.f);
+        check(img.isValid(), std::string("page paints: ") + names[pg]);
+        if (snapshotDir.isNotEmpty())
+        {
+            juce::File out = juce::File(snapshotDir).getChildFile(juce::String("deasynth-") + names[pg] + ".png");
+            out.deleteFile();
+            juce::FileOutputStream os(out);
+            juce::PNGImageFormat().writeImageToStream(img, os);
+        }
+    }
+
+    ed->setScene(1);
+    ed->setPage(0);
+    check(ed->context().scene == 1, "switches to layer B");
+    ed->showBrowser(true);
+    ed->showSaveDialog();
+    ed->showAbout(true);
+    ed->showAbout(false);
+    ed->initPatch();
+    ed->setZoom(1.5f);
+    check(ed->getWidth() == 1920, "resizes to 150%");
+    auto img = ed->createComponentSnapshot(ed->getLocalBounds(), true, 1.f);
+    check(img.isValid(), "paints at 150%");
+    base.reset();
+    check(true, "editor closes cleanly");
+}
+} // namespace
+
+int main(int argc, char **argv)
+{
+    juce::ScopedJuceInitialiser_GUI gui;
+
+    testAudio();
+    testAnalogStage();
+    testVintage();
+    testState();
+    testParameters();
+    testEditor(argc > 1 ? juce::String(argv[1]) : juce::String());
+
+    std::cout << (failures == 0 ? "\nAll checks passed." : "\nFAILED: " + std::to_string(failures) + " check(s).")
+              << std::endl;
+    return failures == 0 ? 0 : 1;
+}

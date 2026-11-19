@@ -1,6 +1,7 @@
 # vi:set sw=2 et:
 option(SURGE_BUILD_XT "Build Surge XT plugin" ON)
 option(SURGE_BUILD_FX "Build Surge XT Effects plugin" ON)
+option(SURGE_BUILD_DEASYNTH "Build Deasynth, the custom-interface synth built on the Surge XT engine" ON)
 option(SURGE_BUILD_PYTHON_BINDINGS "Build Surge XT Python bindings" OFF)
 option(SURGE_BUILD_RS "Build Surge XT Rust bindings" OFF)
 option(SURGE_BUILD_RS_EXAMPLES "Build examples for Rust bindings" OFF)
@@ -178,6 +179,10 @@ if(SURGE_BUILD_XT AND NOT SURGE_SKIP_JUCE_FOR_RACK)
   add_subdirectory(surge-xt)
 endif()
 
+if(SURGE_BUILD_DEASYNTH AND NOT SURGE_SKIP_JUCE_FOR_RACK)
+  add_subdirectory(deasynth)
+endif()
+
 if(SURGE_BUILD_PYTHON_BINDINGS)
   add_subdirectory(surge-python)
 endif()
@@ -191,6 +196,6 @@ if(SURGE_BUILD_FX AND SURGE_BUILD_XT AND NOT CMAKE_CROSSCOMPILING)
   surge_make_installers()
 endif()
 
-if(NOT CMAKE_CROSSCOMPILING AND NOT SURGE_SKIP_JUCE_FOR_RACK)
+if(SURGE_BUILD_FX AND SURGE_BUILD_XT AND NOT CMAKE_CROSSCOMPILING AND NOT SURGE_SKIP_JUCE_FOR_RACK)
   include(cmake/pluginval.cmake)
 endif()
