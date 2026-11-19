@@ -22,7 +22,11 @@ constexpr int gap = 6;
 
 struct DeasynthEditor::Root : juce::Component
 {
-    explicit Root(DeasynthEditor &e) : editor(e) { setOpaque(true); }
+    explicit Root(DeasynthEditor &e) : editor(e)
+    {
+        setOpaque(true);
+        setComponentID("deasynth-root"); // see menuParentFor
+    }
     void paint(juce::Graphics &g) override { editor.paintRoot(g); }
     DeasynthEditor &editor;
 };
@@ -31,8 +35,10 @@ struct DeasynthEditor::Root : juce::Component
 DeasynthEditor::DeasynthEditor(DeasynthProcessor &p)
     : juce::AudioProcessorEditor(&p), processor(p), ctx{p, p.surge.get()}
 {
+    // Set on this editor only, never as the process-wide default: a host can have several
+    // Deasynth windows (and other JUCE plugins) open at once. Menus and tooltips are parented
+    // to the editor, so they pick this up.
     setLookAndFeel(&lnf);
-    juce::LookAndFeel::setDefaultLookAndFeel(&lnf);
 
     root = std::make_unique<Root>(*this);
     addAndMakeVisible(*root);
@@ -85,7 +91,7 @@ DeasynthEditor::DeasynthEditor(DeasynthProcessor &p)
                     pendingStructure = true;
                 });
             }
-            m.showMenuAsync(juce::PopupMenu::Options().withParentComponent(this));
+            m.showMenuAsync(juce::PopupMenu::Options().withParentComponent(root.get()));
         };
         root->addAndMakeVisible(*sceneButtons[i]);
     }
@@ -211,7 +217,6 @@ DeasynthEditor::DeasynthEditor(DeasynthProcessor &p)
 DeasynthEditor::~DeasynthEditor()
 {
     stopTimer();
-    juce::LookAndFeel::setDefaultLookAndFeel(nullptr);
     setLookAndFeel(nullptr);
 }
 
@@ -553,7 +558,7 @@ void DeasynthEditor::showMainMenu()
     m.addSeparator();
     m.addItem("About Deasynth", [this]() { showAbout(true); });
 
-    m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(menuButton.get()).withParentComponent(this));
+    m.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(menuButton.get()).withParentComponent(root.get()));
 }
 
 bool DeasynthEditor::keyPressed(const juce::KeyPress &key)

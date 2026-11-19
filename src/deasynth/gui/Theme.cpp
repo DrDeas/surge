@@ -64,6 +64,20 @@ juce::Typeface::Ptr DeasynthLookAndFeel::getTypefaceForFont(const juce::Font &f)
     return f.isBold() ? theme::boldTypeface() : theme::regularTypeface();
 }
 
+void DeasynthLookAndFeel::getIdealPopupMenuItemSize(const juce::String &text, bool isSeparator,
+                                                    int standardMenuItemHeight, int &idealWidth,
+                                                    int &idealHeight)
+{
+    juce::LookAndFeel_V4::getIdealPopupMenuItemSize(text, isSeparator, standardMenuItemHeight,
+                                                    idealWidth, idealHeight);
+    if (!isSeparator)
+    {
+        // room for the tick dot on the left and a submenu arrow on the right
+        idealWidth += 30;
+        idealHeight = std::max(idealHeight, 24);
+    }
+}
+
 void DeasynthLookAndFeel::drawPopupMenuBackground(juce::Graphics &g, int width, int height)
 {
     g.fillAll(theme::panelHi);

@@ -286,7 +286,7 @@ void OscDisplay::showWavetableMenu()
 
     juce::Component::SafePointer<OscDisplay> safe(this);
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this).withParentComponent(
-                           getTopLevelComponent()),
+                           menuParentFor(*this)),
                        [safe](int r) {
                            if (safe && r > 0)
                            {

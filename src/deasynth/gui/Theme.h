@@ -70,6 +70,9 @@ struct DeasynthLookAndFeel : juce::LookAndFeel_V4
 
     juce::Typeface::Ptr getTypefaceForFont(const juce::Font &) override;
     juce::Font getPopupMenuFont() override { return theme::font(14.f); }
+    void getIdealPopupMenuItemSize(const juce::String &text, bool isSeparator,
+                                   int standardMenuItemHeight, int &idealWidth,
+                                   int &idealHeight) override;
     void drawPopupMenuBackground(juce::Graphics &, int width, int height) override;
     void drawPopupMenuItem(juce::Graphics &, const juce::Rectangle<int> &area, bool isSeparator,
                            bool isActive, bool isHighlighted, bool isTicked, bool hasSubMenu,

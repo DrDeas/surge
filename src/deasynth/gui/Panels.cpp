@@ -492,7 +492,8 @@ MacroPanel::MacroPanel(EditorContext &c) : Panel(c, "Macros", theme::macro)
 
         auto *a = add<FlatButton>("Assign", theme::macro);
         a->setFontSize(10.5f);
-        a->setTooltip("Arm this macro, then drag any knob to set how far the macro moves it.");
+        a->setTooltip("Arm this macro, then drag any knob to set how far the macro moves it. "
+                      "Right-click to rename the macro.");
         a->onClick = [this, i]() {
             const int ms = ms_ctrl1 + i;
             ctx.armedSource = (ctx.armedSource == ms) ? (int)ms_original : ms;
@@ -506,28 +507,45 @@ MacroPanel::MacroPanel(EditorContext &c) : Panel(c, "Macros", theme::macro)
 
 void MacroPanel::rename(int i)
 {
-    auto *w = new juce::AlertWindow("Rename macro " + juce::String(i + 1),
-                                    "Give this macro a name that says what it does.",
-                                    juce::MessageBoxIconType::NoIcon, getTopLevelComponent());
-    w->addTextEditor("name", ctx.patch().CustomControllerLabel[i]);
-    w->addButton("Rename", 1, juce::KeyPress(juce::KeyPress::returnKey));
-    w->addButton("Cancel", 0, juce::KeyPress(juce::KeyPress::escapeKey));
+    // an in-place text box over the macro's caption
+    renameBox = std::make_unique<juce::TextEditor>();
+    auto area = knobs[i]->getBounds().removeFromBottom(20).expanded(14, 2);
+    addAndMakeVisible(*renameBox);
+    renameBox->setBounds(area.getIntersection(getLocalBounds().reduced(4)));
+    renameBox->setFont(theme::font(12.f));
+    renameBox->setJustification(juce::Justification::centred);
+    renameBox->setInputRestrictions(CUSTOM_CONTROLLER_LABEL_SIZE - 1);
+    juce::String current = ctx.patch().CustomControllerLabel[i];
+    renameBox->setText(current == "-" ? juce::String() : current, false);
+    renameBox->selectAll();
+    renameBox->grabKeyboardFocus();
+
     juce::Component::SafePointer<MacroPanel> safe(this);
-    w->enterModalState(true, juce::ModalCallbackFunction::create([safe, w, i](int r) {
-                           if (r == 1 && safe)
-                           {
-                               auto name = w->getTextEditorContents("name").trim();
-                               if (name.isEmpty())
-                                   name = "Macro " + juce::String(i + 1);
-                               auto &label = safe->ctx.patch().CustomControllerLabel[i];
-                               memset(label, 0, CUSTOM_CONTROLLER_LABEL_SIZE);
-                               name.copyToUTF8(label, CUSTOM_CONTROLLER_LABEL_SIZE - 1);
-                               safe->ctx.markDirty();
-                               parameterInfoUpdated = true;
-                               safe->refresh(true);
-                           }
-                       }),
-                       true);
+    auto close = [safe]() {
+        juce::MessageManager::callAsync([safe]() {
+            if (safe)
+            {
+                safe->renameBox.reset();
+                safe->refresh(true);
+            }
+        });
+    };
+    renameBox->onReturnKey = [safe, close, i]() {
+        if (safe && safe->renameBox)
+        {
+            auto name = safe->renameBox->getText().trim();
+            if (name.isEmpty())
+                name = "Macro " + juce::String(i + 1);
+            auto &label = safe->ctx.patch().CustomControllerLabel[i];
+            memset(label, 0, CUSTOM_CONTROLLER_LABEL_SIZE);
+            name.copyToUTF8(label, CUSTOM_CONTROLLER_LABEL_SIZE - 1);
+            safe->ctx.markDirty();
+            parameterInfoUpdated = true; // the host shows macro names too
+        }
+        close();
+    };
+    renameBox->onEscapeKey = close;
+    renameBox->onFocusLost = close;
 }
 
 void MacroPanel::refresh(bool force)

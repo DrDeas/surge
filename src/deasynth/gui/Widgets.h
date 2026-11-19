@@ -296,6 +296,12 @@ class Section : public juce::Component
     juce::Colour accent;
 };
 
+/**
+ * Where popup menus should live: the editor's scaled design surface, so that menus follow
+ * the window zoom and use the editor's look and feel. Falls back to the top level component.
+ */
+juce::Component *menuParentFor(juce::Component &c);
+
 // drawing helpers shared between controls
 namespace draw
 {

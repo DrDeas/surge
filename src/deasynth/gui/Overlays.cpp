@@ -60,7 +60,7 @@ void ModBar::sourceMenu(int source)
     const bool used = ctx.synth->isModsourceUsed((modsources)source);
     menu.addItem(1, "Remove everything this source modulates", used);
     juce::Component::SafePointer<ModBar> safe(this);
-    menu.showMenuAsync(juce::PopupMenu::Options().withParentComponent(getTopLevelComponent()),
+    menu.showMenuAsync(juce::PopupMenu::Options().withParentComponent(menuParentFor(*this)),
                        [safe, source](int r) {
                            if (!safe || r != 1)
                                return;

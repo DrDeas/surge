@@ -81,6 +81,16 @@ juce::String EditorContext::nameForSource(int ms, bool shortName) const
     return modsource_names_button[ms];
 }
 
+juce::Component *menuParentFor(juce::Component &c)
+{
+    for (auto *p = &c; p != nullptr; p = p->getParentComponent())
+    {
+        if (p->getComponentID() == "deasynth-root")
+            return p;
+    }
+    return c.getTopLevelComponent();
+}
+
 //==============================================================================
 namespace draw
 {
@@ -730,7 +740,7 @@ void ParamControl::showChoiceMenu()
 
     juce::Component::SafePointer<ParamControl> safe(this);
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this).withParentComponent(
-                           getTopLevelComponent()),
+                           menuParentFor(*this)),
                        [safe, lo](int r) {
                            if (r > 0 && safe)
                                safe->setIntValue(r - 1 + lo);
@@ -796,7 +806,7 @@ void ParamControl::showContextMenu()
     juce::Component::SafePointer<ParamControl> safe(this);
     menu.showMenuAsync(
         juce::PopupMenu::Options().withTargetComponent(this).withParentComponent(
-            getTopLevelComponent()),
+            menuParentFor(*this)),
         [safe, sources](int r) {
             if (!safe || r <= 0 || !safe->usable())
                 return;
@@ -937,7 +947,7 @@ void ValueKnob::mouseDown(const juce::MouseEvent &e)
             extendMenu(menu);
         juce::Component::SafePointer<ValueKnob> safe(this);
         menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this).withParentComponent(
-                               getTopLevelComponent()),
+                               menuParentFor(*this)),
                            [safe](int r) {
                                if (safe && r == 1 && safe->setValue)
                                {

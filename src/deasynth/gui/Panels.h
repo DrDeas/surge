@@ -146,6 +146,7 @@ class MacroPanel : public Panel
     void rename(int i);
     ValueKnob *knobs[n_customcontrollers];
     FlatButton *assign[n_customcontrollers];
+    std::unique_ptr<juce::TextEditor> renameBox;
 };
 
 /** Every active modulation routing of the current layer, editable in one list. */
