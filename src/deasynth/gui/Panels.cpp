@@ -835,7 +835,8 @@ void FxPanel::toggleBypass(int slot)
 {
     auto &p = ctx.patch().fx_disable;
     p.val.i ^= (1 << slot);
-    ctx.synth->fx_suspend_bitmask = p.val.i;
+    // tell the engine which slot changed state, so that effect's tail is cleared
+    ctx.synth->fx_suspend_bitmask = (1 << slot);
     ctx.markDirty();
     refresh(true);
 }
