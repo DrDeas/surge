@@ -54,7 +54,10 @@ class OscDisplay : public juce::Component, public Refreshable
     std::vector<pdata> tp;
 };
 
-/** Magnitude response of one filter unit, measured from the real filter. */
+/**
+ * Magnitude response of one filter unit, measured from the real filter.
+ * Drag on it: left and right moves the cutoff, up and down the resonance.
+ */
 class FilterDisplay : public juce::Component, public Refreshable
 {
   public:
@@ -64,9 +67,16 @@ class FilterDisplay : public juce::Component, public Refreshable
     void refresh(bool force) override;
     void paint(juce::Graphics &g) override;
     void resized() override { fingerprint = 0; }
+    void mouseDown(const juce::MouseEvent &e) override;
+    void mouseDrag(const juce::MouseEvent &e) override;
+    void mouseUp(const juce::MouseEvent &e) override;
+    void mouseEnter(const juce::MouseEvent &e) override;
+    void mouseExit(const juce::MouseEvent &e) override;
 
   private:
     void recompute();
+    bool dragging{false};
+    juce::Point<float> lastDrag;
 
     EditorContext &ctx;
     int unit;
@@ -76,7 +86,10 @@ class FilterDisplay : public juce::Component, public Refreshable
     uint64_t fingerprint{0};
 };
 
-/** The ADSR contour, to scale. */
+/**
+ * The ADSR contour. Its three handles can be dragged: the peak sets the attack time, the
+ * corner after it sets decay time and sustain level, the last one sets the release time.
+ */
 class EnvDisplay : public juce::Component, public Refreshable
 {
   public:
@@ -84,8 +97,25 @@ class EnvDisplay : public juce::Component, public Refreshable
 
     void refresh(bool force) override;
     void paint(juce::Graphics &g) override;
+    void mouseMove(const juce::MouseEvent &e) override;
+    void mouseDown(const juce::MouseEvent &e) override;
+    void mouseDrag(const juce::MouseEvent &e) override;
+    void mouseUp(const juce::MouseEvent &e) override;
+    void mouseExit(const juce::MouseEvent &e) override;
 
   private:
+    struct Geometry
+    {
+        juce::Rectangle<float> area;
+        float xDecay, xSus, xRel, xEnd, sustainY;
+    };
+    Geometry geometry() const;
+    int handleAt(juce::Point<float> p) const;
+
+    // each timed stage takes between stageMin and stageMin + stageSpan of the width
+    static constexpr float stageMin = 0.03f, stageSpan = 0.24f, sustainWidth = 0.16f;
+    int hot{-1}, grabbed{-1};
+    juce::Point<float> lastDrag;
     EditorContext &ctx;
     int which;
     juce::Colour accent;

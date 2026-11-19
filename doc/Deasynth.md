@@ -8,6 +8,8 @@ repository. It builds as a standalone application and as a plugin:
 | macOS    | Standalone app, Audio Unit (Logic Pro, GarageBand, MainStage), VST3 |
 | Linux, Windows | Standalone app, VST3 |
 
+![The Synth page](images/deasynth-synth.png)
+
 Surge XT itself is untouched: Deasynth is an additional target (`src/deasynth`) that links the
 same engine library (`surge-common`). Both can be built from one checkout and installed side
 by side; they keep separate settings, patches and plugin identities.
@@ -144,15 +146,22 @@ of a wavetable oscillator to choose a table). The mixer, with ring modulators, n
 **Drive**, which is the level into the filters. Two filters with their measured frequency
 response, their routing, feedback and a waveshaper. Amp and filter envelopes.
 
+![The Modulation page](images/deasynth-modulation.png)
+
 **Modulation page.** The LFO editor (shapes include a 16-step sequencer you draw with the
 mouse), the macros (right-click one to rename it), and the modulation matrix, which lists
 every routing in the layer with its depth, a mute and a remove button.
+
+![The Effects page](images/deasynth-effects.png)
 
 **Effects page.** Sixteen slots in four chains: inserts for each layer, sends, and master.
 Click a slot to edit it, right-click to bypass it.
 
 **Bottom.** Play mode, glide, bend range, the two character controls, wheels, keyboard and
 output.
+
+The displays are controls too: drag on a filter curve to move cutoff (left and right) and
+resonance (up and down), and drag an envelope's handles to set its times and sustain level.
 
 Every knob: drag to turn (hold Shift for fine), double-click to reset, right-click for a
 menu to type a value, sync a time to tempo, extend a range or remove modulation. Hovering
@@ -242,7 +251,8 @@ checks the audio path (including odd host buffer sizes), that Warmth is transpar
 bounded and DC-free at full, that Vintage is exact at zero and within its limits at full,
 session state round trips, that damaged or truncated state is rejected without disturbing
 the loaded sound, the host parameter list, and that every editor page builds and paints.
-Pass a directory to have it write a snapshot of each page there.
+Pass a directory to have it write a snapshot of each page there; the pictures in this
+document are made that way.
 
 `deasynth-selftest --write-patches resources/deasynth/patches` regenerates the starter
 patches and fails if any is silent or clips.

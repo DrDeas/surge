@@ -81,6 +81,7 @@ class FilterPanel : public Panel
     FilterPanel(EditorContext &ctx, int unit);
     void rebind() override;
     void resized() override;
+    void refresh(bool force) override;
 
   private:
     int unit;

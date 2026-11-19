@@ -81,6 +81,33 @@ juce::String EditorContext::nameForSource(int ms, bool shortName) const
     return modsource_names_button[ms];
 }
 
+void EditorContext::beginEdit(Parameter *p) const
+{
+    if (auto *hp = proc.hostParamFor(p))
+    {
+        hp->inEditGesture = true;
+        hp->beginChangeGesture();
+    }
+}
+
+void EditorContext::setValue01(Parameter *p, float v) const
+{
+    if (!p)
+        return;
+    synth->setParameter01(synth->idForParameter(p), juce::jlimit(0.f, 1.f, v));
+    if (auto *hp = proc.hostParamFor(p))
+        hp->setValueNotifyingHost(p->get_value_f01());
+}
+
+void EditorContext::endEdit(Parameter *p) const
+{
+    if (auto *hp = proc.hostParamFor(p))
+    {
+        hp->endChangeGesture();
+        hp->inEditGesture = false;
+    }
+}
+
 juce::Component *menuParentFor(juce::Component &c)
 {
     for (auto *p = &c; p != nullptr; p = p->getParentComponent())
@@ -404,7 +431,7 @@ void ParamControl::paintKnob(juce::Graphics &g)
 
         // a faint halo marks every knob the armed source can reach
         const float size = std::min(knobArea.getWidth(), knobArea.getHeight());
-        g.setColour(col.withAlpha(active ? 0.5f : 0.22f));
+        g.setColour(col.withAlpha(active ? 0.55f : 0.34f));
         g.drawEllipse(juce::Rectangle<float>(size - 1.f, size - 1.f).withCentre(knobArea.getCentre()),
                       1.f);
         if (active)
@@ -479,7 +506,8 @@ void ParamControl::paintChoice(juce::Graphics &g)
 
     g.setColour(enabled ? accent.interpolatedWith(theme::text, 0.55f) : theme::textFaint);
     g.setFont(theme::font(12.5f, true));
-    g.drawFittedText(param->get_display(), textArea, juce::Justification::centredLeft, 1, 0.75f);
+    g.drawFittedText(juce::String(param->get_display()).replace("Compensated", "Comp."), textArea,
+                     juce::Justification::centredLeft, 1, 0.75f);
 
     if (showLabel)
         draw::captionBelow(g, labelArea, labelText(),

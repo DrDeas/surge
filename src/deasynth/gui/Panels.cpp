@@ -194,10 +194,23 @@ void FilterPanel::rebind()
         link->setParam(&s.f2_link_resonance);
 }
 
+void FilterPanel::refresh(bool force)
+{
+    // a filter that is switched off does nothing, so its controls step back
+    const bool off = ctx.sceneData().filterunit[unit].type.val.i == sst::filters::FilterType::fut_none;
+    const float alpha = off ? 0.35f : 1.f;
+    for (auto *c : {subtype, cutoff, resonance, envmod, keytrack, offset, link})
+    {
+        if (c && c->getAlpha() != alpha)
+            c->setAlpha(alpha);
+    }
+    Panel::refresh(force);
+}
+
 void FilterPanel::resized()
 {
     auto header = getHeaderBounds();
-    subtype->setBounds(header.removeFromRight(72));
+    subtype->setBounds(header.removeFromRight(84));
     header.removeFromRight(4);
     type->setBounds(header);
 

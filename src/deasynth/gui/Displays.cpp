@@ -396,6 +396,59 @@ void FilterDisplay::recompute()
     }
 }
 
+void FilterDisplay::mouseEnter(const juce::MouseEvent &)
+{
+    if (ctx.setHint)
+        ctx.setHint("Drag: left and right for cutoff, up and down for resonance");
+}
+
+void FilterDisplay::mouseExit(const juce::MouseEvent &)
+{
+    if (ctx.setHint)
+        ctx.setHint({});
+}
+
+void FilterDisplay::mouseDown(const juce::MouseEvent &e)
+{
+    auto &fu = ctx.sceneData().filterunit[unit];
+    if (e.mods.isPopupMenu() || fu.type.val.i == sst::filters::FilterType::fut_none)
+        return;
+    dragging = true;
+    lastDrag = e.position;
+    ctx.beginEdit(&fu.cutoff);
+    ctx.beginEdit(&fu.resonance);
+}
+
+void FilterDisplay::mouseDrag(const juce::MouseEvent &e)
+{
+    if (!dragging)
+        return;
+    auto &fu = ctx.sceneData().filterunit[unit];
+    const float fine = e.mods.isShiftDown() ? 0.2f : 1.f;
+    const float dx = (e.position.x - lastDrag.x) / (float)std::max(1, getWidth());
+    const float dy = (lastDrag.y - e.position.y) / (float)std::max(1, getHeight());
+    lastDrag = e.position;
+    // the picture spans 20 Hz to 20 kHz, about ten octaves of the cutoff control's range
+    const float span = fu.cutoff.val_max.f - fu.cutoff.val_min.f;
+    if (dx != 0.f)
+        ctx.setValue01(&fu.cutoff, fu.cutoff.get_value_f01() + dx * fine * 120.f / std::max(1.f, span));
+    if (dy != 0.f)
+        ctx.setValue01(&fu.resonance, fu.resonance.get_value_f01() + dy * fine);
+    if (ctx.setHint)
+        ctx.setHint(juce::String("Cutoff ") + fu.cutoff.get_display() + ":  Resonance " +
+                    fu.resonance.get_display());
+}
+
+void FilterDisplay::mouseUp(const juce::MouseEvent &)
+{
+    if (!dragging)
+        return;
+    dragging = false;
+    auto &fu = ctx.sceneData().filterunit[unit];
+    ctx.endEdit(&fu.cutoff);
+    ctx.endEdit(&fu.resonance);
+}
+
 void FilterDisplay::paint(juce::Graphics &g)
 {
     auto b = getLocalBounds().toFloat();
@@ -443,28 +496,145 @@ void EnvDisplay::refresh(bool force)
     }
 }
 
-void EnvDisplay::paint(juce::Graphics &g)
+EnvDisplay::Geometry EnvDisplay::geometry() const
 {
-    auto b = getLocalBounds().toFloat();
-    draw::displayWell(g, b);
-
     auto &eg = ctx.sceneData().adsr[which];
-    auto area = b.reduced(8.f, 9.f);
-    const bool analog = eg.mode.val.i == emt_analog;
+    Geometry gm;
+    gm.area = getLocalBounds().toFloat().reduced(8.f, 9.f);
 
     // Stage widths follow the time controls on their own (logarithmic) scale, so every stage
     // stays readable from a few milliseconds to half a minute.
     auto norm = [](const Parameter &p) {
         return juce::jlimit(0.f, 1.f, (p.val.f - p.val_min.f) / (p.val_max.f - p.val_min.f));
     };
-    const float wA = 0.03f + 0.24f * norm(eg.a);
-    const float wD = 0.03f + 0.24f * norm(eg.d);
-    const float wR = 0.03f + 0.24f * norm(eg.r);
-    const float wS = 0.16f;
-    const float sus = juce::jlimit(0.f, 1.f, eg.s.val.f);
+    const float W = gm.area.getWidth();
+    gm.xDecay = gm.area.getX() + (stageMin + stageSpan * norm(eg.a)) * W;
+    gm.xSus = gm.xDecay + (stageMin + stageSpan * norm(eg.d)) * W;
+    gm.xRel = gm.xSus + sustainWidth * W;
+    gm.xEnd = gm.xRel + (stageMin + stageSpan * norm(eg.r)) * W;
+    gm.sustainY = gm.area.getBottom() - juce::jlimit(0.f, 1.f, eg.s.val.f) * gm.area.getHeight();
+    return gm;
+}
 
-    const float x0 = area.getX();
-    const float W = area.getWidth();
+int EnvDisplay::handleAt(juce::Point<float> p) const
+{
+    const auto gm = geometry();
+    const juce::Point<float> handles[3] = {{gm.xDecay, gm.area.getY()},
+                                           {gm.xSus, gm.sustainY},
+                                           {gm.xEnd, gm.area.getBottom()}};
+    int best = -1;
+    float bestDist = 14.f;
+    for (int i = 0; i < 3; ++i)
+    {
+        const float d = handles[i].getDistanceFrom(p);
+        if (d < bestDist)
+        {
+            bestDist = d;
+            best = i;
+        }
+    }
+    return best;
+}
+
+void EnvDisplay::mouseMove(const juce::MouseEvent &e)
+{
+    const int h = handleAt(e.position);
+    if (h != hot)
+    {
+        hot = h;
+        static const char *hints[3] = {"Drag to set the attack time",
+                                       "Drag to set decay time and sustain level",
+                                       "Drag to set the release time"};
+        if (ctx.setHint)
+            ctx.setHint(h >= 0 ? hints[h] : "");
+        setMouseCursor(h >= 0 ? juce::MouseCursor::DraggingHandCursor : juce::MouseCursor::NormalCursor);
+        repaint();
+    }
+}
+
+void EnvDisplay::mouseExit(const juce::MouseEvent &)
+{
+    if (grabbed < 0 && hot >= 0)
+    {
+        hot = -1;
+        if (ctx.setHint)
+            ctx.setHint({});
+        repaint();
+    }
+}
+
+void EnvDisplay::mouseDown(const juce::MouseEvent &e)
+{
+    grabbed = e.mods.isPopupMenu() ? -1 : handleAt(e.position);
+    if (grabbed < 0)
+        return;
+    lastDrag = e.position;
+    auto &eg = ctx.sceneData().adsr[which];
+    if (grabbed == 0)
+        ctx.beginEdit(&eg.a);
+    else if (grabbed == 1)
+    {
+        ctx.beginEdit(&eg.d);
+        ctx.beginEdit(&eg.s);
+    }
+    else
+        ctx.beginEdit(&eg.r);
+}
+
+void EnvDisplay::mouseDrag(const juce::MouseEvent &e)
+{
+    if (grabbed < 0)
+        return;
+    auto &eg = ctx.sceneData().adsr[which];
+    const auto gm = geometry();
+    const float fine = e.mods.isShiftDown() ? 0.2f : 1.f;
+    const float dx = (e.position.x - lastDrag.x) / (stageSpan * gm.area.getWidth()) * fine;
+    const float dy = (lastDrag.y - e.position.y) / gm.area.getHeight() * fine;
+    lastDrag = e.position;
+
+    Parameter *timeParam = grabbed == 0 ? &eg.a : (grabbed == 1 ? &eg.d : &eg.r);
+    if (dx != 0.f)
+        ctx.setValue01(timeParam, timeParam->get_value_f01() + dx);
+    if (grabbed == 1 && dy != 0.f)
+        ctx.setValue01(&eg.s, eg.s.get_value_f01() + dy);
+
+    if (ctx.setHint)
+    {
+        juce::String h = juce::String(timeParam->get_name()) + " " + timeParam->get_display();
+        if (grabbed == 1)
+            h += juce::String(":  Sustain ") + eg.s.get_display();
+        ctx.setHint(h);
+    }
+}
+
+void EnvDisplay::mouseUp(const juce::MouseEvent &e)
+{
+    if (grabbed < 0)
+        return;
+    auto &eg = ctx.sceneData().adsr[which];
+    if (grabbed == 0)
+        ctx.endEdit(&eg.a);
+    else if (grabbed == 1)
+    {
+        ctx.endEdit(&eg.d);
+        ctx.endEdit(&eg.s);
+    }
+    else
+        ctx.endEdit(&eg.r);
+    grabbed = -1;
+    mouseMove(e);
+}
+
+void EnvDisplay::paint(juce::Graphics &g)
+{
+    auto b = getLocalBounds().toFloat();
+    draw::displayWell(g, b);
+
+    auto &eg = ctx.sceneData().adsr[which];
+    const auto gm = geometry();
+    const auto area = gm.area;
+    const bool analog = eg.mode.val.i == emt_analog;
+    const float sus = juce::jlimit(0.f, 1.f, eg.s.val.f);
     auto Y = [&](float level) { return area.getBottom() - level * area.getHeight(); };
 
     // shape exponents: analog stages are RC curves; digital ones follow the shape switches
@@ -473,43 +643,45 @@ void EnvDisplay::paint(juce::Graphics &g)
     const float releaseCurve = analog ? 2.6f : (eg.r_s.val.i == 0 ? 1.f : (eg.r_s.val.i == 1 ? 2.f : 3.f));
 
     juce::Path p;
-    p.startNewSubPath(x0, Y(0.f));
+    p.startNewSubPath(area.getX(), Y(0.f));
     constexpr int steps = 24;
-    float x = x0;
     for (int i = 1; i <= steps; ++i)
     {
         const float t = (float)i / steps;
-        p.lineTo(x + t * wA * W, Y(std::pow(t, attackCurve)));
+        p.lineTo(area.getX() + t * (gm.xDecay - area.getX()), Y(std::pow(t, attackCurve)));
     }
-    x += wA * W;
-    const float xDecay = x;
     for (int i = 1; i <= steps; ++i)
     {
         const float t = (float)i / steps;
-        p.lineTo(x + t * wD * W, Y(sus + (1.f - sus) * std::pow(1.f - t, decayCurve)));
+        p.lineTo(gm.xDecay + t * (gm.xSus - gm.xDecay), Y(sus + (1.f - sus) * std::pow(1.f - t, decayCurve)));
     }
-    x += wD * W;
-    const float xSus = x;
-    p.lineTo(x + wS * W, Y(sus));
-    x += wS * W;
-    const float xRel = x;
+    p.lineTo(gm.xRel, Y(sus));
     for (int i = 1; i <= steps; ++i)
     {
         const float t = (float)i / steps;
-        p.lineTo(x + t * wR * W, Y(sus * std::pow(1.f - t, releaseCurve)));
+        p.lineTo(gm.xRel + t * (gm.xEnd - gm.xRel), Y(sus * std::pow(1.f - t, releaseCurve)));
     }
 
     g.setColour(theme::outline.withAlpha(0.5f));
-    for (float gx : {xDecay, xSus, xRel})
+    for (float gx : {gm.xDecay, gm.xSus, gm.xRel})
         g.drawVerticalLine((int)gx, area.getY(), area.getBottom());
 
     fillUnder(g, p, b, area.getBottom(), accent);
     strokeTrace(g, p, accent);
 
-    g.setColour(accent);
-    for (auto pt : {juce::Point<float>(xDecay, Y(1.f)), juce::Point<float>(xSus, Y(sus)),
-                    juce::Point<float>(xRel, Y(sus))})
-        g.fillEllipse(juce::Rectangle<float>(5.f, 5.f).withCentre(pt));
+    const juce::Point<float> handles[3] = {{gm.xDecay, Y(1.f)}, {gm.xSus, Y(sus)}, {gm.xEnd, Y(0.f)}};
+    for (int i = 0; i < 3; ++i)
+    {
+        const bool lit = i == hot || i == grabbed;
+        const float d = lit ? 9.f : 6.f;
+        g.setColour(theme::well);
+        g.fillEllipse(juce::Rectangle<float>(d + 3.f, d + 3.f).withCentre(handles[i]));
+        g.setColour(lit ? theme::text : accent);
+        g.fillEllipse(juce::Rectangle<float>(d, d).withCentre(handles[i]));
+    }
+    // the end of the sustain plateau is where the key is released; it is not a handle
+    g.setColour(accent.withAlpha(0.6f));
+    g.fillEllipse(juce::Rectangle<float>(4.f, 4.f).withCentre({gm.xRel, Y(sus)}));
 }
 
 //==============================================================================

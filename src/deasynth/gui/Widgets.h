@@ -38,6 +38,15 @@ struct EditorContext
     SurgePatch &patch() const { return synth->storage.getPatch(); }
     SurgeSceneStorage &sceneData() const { return patch().scene[scene]; }
 
+    /**
+     * Editing an engine parameter from something other than a ParamControl (dragging on a
+     * display). Bracket a drag with beginEdit / endEdit so the host records one automation
+     * gesture.
+     */
+    void beginEdit(Parameter *p) const;
+    void setValue01(Parameter *p, float v) const;
+    void endEdit(Parameter *p) const;
+
     bool isArmed() const { return armedSource != ms_original; }
     static juce::Colour colourForSource(int ms);
     juce::String nameForSource(int ms, bool shortName = false) const;

@@ -374,10 +374,54 @@ void testEditor(const juce::String &snapshotDir)
     check(ed->getWidth() == DeasynthEditor::baseWidth && ed->getHeight() == DeasynthEditor::baseHeight,
           "opens at its design size");
 
+    if (snapshotDir.isNotEmpty())
+    {
+        // Put the instrument in a state worth looking at: a chord sounding, a few modulation
+        // routings with one source armed, and a couple of effects loaded.
+        auto &s = *p.surge;
+        auto &sc = s.storage.getPatch().scene[0];
+        auto choose = [&](Parameter &par, int v) {
+            s.setParameter01(s.idForParameter(&par),
+                             Parameter::intScaledToFloat(v, par.val_max.i, par.val_min.i), false, true);
+        };
+        choose(sc.mute_o2, 0);
+        s.setParameter01(s.idForParameter(&sc.osc[1].pitch), sc.osc[1].pitch.value_to_normalized(0.08f));
+        s.setParameter01(s.idForParameter(&sc.osc[1].p[0]), sc.osc[1].p[0].value_to_normalized(-1.f));
+        s.setParameter01(s.idForParameter(&sc.filterunit[0].cutoff), sc.filterunit[0].cutoff.value_to_normalized(2.f));
+        s.setParameter01(s.idForParameter(&sc.filterunit[0].resonance), 0.45f);
+        s.setModDepth01(sc.filterunit[0].cutoff.id, ms_lfo1, 0, 0, 0.14f);
+        s.setModDepth01(sc.osc[1].p[1].id, ms_lfo1, 0, 0, 0.25f);
+        s.setModDepth01(sc.filterunit[0].cutoff.id, ms_ctrl1, 0, 0, 0.35f);
+        s.setModDepth01(sc.filterunit[0].resonance.id, ms_velocity, 0, 0, 0.15f);
+        s.setModDepth01(sc.level_o2.id, ms_modwheel, 0, 0, -0.3f);
+        strncpy(s.storage.getPatch().CustomControllerLabel[0], "Brightness", CUSTOM_CONTROLLER_LABEL_SIZE - 1);
+        s.setParameter01(s.idForParameter(&sc.lfo[0].rate), sc.lfo[0].rate.value_to_normalized(1.2f));
+        choose(s.storage.getPatch().fx[fxslot_ains1].type, fxt_chorus4);
+        choose(s.storage.getPatch().fx[fxslot_ains2].type, fxt_reverb2);
+        s.storage.getPatch().name = "Evening Ladder";
+        p.editorState.fxSlot = fxslot_ains2;
+        *p.warmthParam = 0.3f;
+
+        juce::MidiBuffer chord;
+        for (int n : {45, 57, 60, 64})
+            chord.addEvent(juce::MidiMessage::noteOn(1, n, (juce::uint8)96), 0);
+        render(p, 60, &chord);
+
+        base.reset();
+        base.reset(p.createEditor());
+        ed = dynamic_cast<DeasynthEditor *>(base.get());
+        ed->context().armedSource = ms_lfo1;
+    }
+
     static const char *names[] = {"synth", "modulation", "effects"};
     for (int pg = 0; pg < DeasynthEditor::numPages; ++pg)
     {
         ed->setPage(pg);
+        if (snapshotDir.isNotEmpty())
+        {
+            render(p, 3); // fresh audio for the scope and meters
+            ed->setPage(pg);
+        }
         auto img = ed->createComponentSnapshot(ed->getLocalBounds(), true, 1.f);
         check(img.isValid(), std::string("page paints: ") + names[pg]);
         if (snapshotDir.isNotEmpty())
