@@ -398,7 +398,13 @@ void ParamControl::paintKnob(juce::Graphics &g)
         g.drawEllipse(juce::Rectangle<float>(size - 1.f, size - 1.f).withCentre(knobArea.getCentre()),
                       1.f);
         if (active)
-            draw::modRing(g, knobArea, v, depth * (param->is_bipolar() ? 0.5f : 1.f), col);
+        {
+            // depth is a fraction of the knob's whole travel. A source that swings both ways
+            // (an LFO, pitch bend) reaches as far below the knob position as above it.
+            if (ctx.synth->isBipolarModulation((modsources)ctx.armedSource))
+                draw::modRing(g, knobArea, v, -depth, col.withAlpha(0.4f));
+            draw::modRing(g, knobArea, v, depth, col);
+        }
     }
     else if (cachedModUsed)
     {
