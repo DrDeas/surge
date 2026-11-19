@@ -604,6 +604,13 @@ void DeasynthProcessor::processBlock(juce::AudioBuffer<float> &buffer, juce::Mid
     outputPeak[1].store(std::max(peakR, outputPeak[1].load(std::memory_order_relaxed)),
                         std::memory_order_relaxed);
 
+    // set by the engine when an oscillator or effect changes type, and by macro renames
+    if (std::atomic_exchange(&parameterInfoUpdated, false))
+    {
+        updateHostDisplay(
+            juce::AudioProcessorListener::ChangeDetails().withParameterInfoChanged(true));
+    }
+
     if (std::atomic_exchange(&surge->patchChanged, false))
     {
         updateHostDisplay(juce::AudioProcessorListener::ChangeDetails()
@@ -653,10 +660,14 @@ void DeasynthProcessor::setStateInformation(const void *data, int sizeInBytes)
         const auto version = (uint32_t)in.readInt();
         const float vintage = in.readFloat();
         const float warmth = in.readFloat();
+        int page = editorState.page;
+        float zoom = editorState.zoom;
         if (version >= 2)
         {
-            editorState.page = juce::jlimit(0, 2, in.readInt());
-            editorState.zoom = juce::jlimit(0.5f, 2.f, in.readFloat());
+            page = juce::jlimit(0, 2, in.readInt());
+            const float z = in.readFloat();
+            if (std::isfinite(z))
+                zoom = juce::jlimit(0.5f, 2.f, z);
         }
         const int declared = in.readInt();
         const int remaining = (int)in.getNumBytesRemaining();
@@ -669,6 +680,8 @@ void DeasynthProcessor::setStateInformation(const void *data, int sizeInBytes)
         if (!looksLikeEnginePatch(engineData, engineSize))
             return;
 
+        editorState.page = page;
+        editorState.zoom = zoom;
         if (std::isfinite(vintage))
             *vintageParam = juce::jlimit(0.f, 1.f, vintage);
         if (std::isfinite(warmth))

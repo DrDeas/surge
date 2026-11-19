@@ -161,6 +161,11 @@ class ValueKnob : public juce::Component, public Refreshable, public juce::Setta
 {
   public:
     ValueKnob(juce::Colour accent, const juce::String &label);
+    ~ValueKnob() override
+    {
+        if (dragging && gesture)
+            gesture(false);
+    }
 
     std::function<float()> getValue;
     std::function<void(float)> setValue;

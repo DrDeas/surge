@@ -534,9 +534,11 @@ void MacroPanel::rename(int i)
     renameBox->grabKeyboardFocus();
 
     juce::Component::SafePointer<MacroPanel> safe(this);
-    auto close = [safe]() {
-        juce::MessageManager::callAsync([safe]() {
-            if (safe)
+    auto *box = renameBox.get();
+    auto close = [safe, box]() {
+        juce::MessageManager::callAsync([safe, box]() {
+            // only if this is still the box that asked; a newer one may have replaced it
+            if (safe && safe->renameBox.get() == box)
             {
                 safe->renameBox.reset();
                 safe->refresh(true);

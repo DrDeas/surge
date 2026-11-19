@@ -194,9 +194,13 @@ DeasynthEditor::DeasynthEditor(DeasynthProcessor &p)
     browser = std::make_unique<PresetBrowser>(*this, ctx);
     saveDialog = std::make_unique<SaveDialog>(*this, ctx);
     about = std::make_unique<AboutPanel>(*this);
+    notice = std::make_unique<NoticePanel>();
     for (auto *o : {(juce::Component *)browser.get(), (juce::Component *)saveDialog.get(),
-                    (juce::Component *)about.get()})
+                    (juce::Component *)about.get(), (juce::Component *)notice.get()})
         root->addChildComponent(*o);
+
+    // from here on the engine's error reports (and any it saved up while starting) come to us
+    ctx.synth->storage.addErrorListener(this);
 
     layoutRoot();
     setPage(juce::jlimit(0, numPages - 1, processor.editorState.page));
@@ -217,6 +221,8 @@ DeasynthEditor::DeasynthEditor(DeasynthProcessor &p)
 DeasynthEditor::~DeasynthEditor()
 {
     stopTimer();
+    if (ctx.synth)
+        ctx.synth->storage.removeErrorListener(this);
     setLookAndFeel(nullptr);
 }
 
@@ -314,6 +320,7 @@ void DeasynthEditor::layoutRoot()
     browser->setBounds(overlay);
     saveDialog->setBounds(overlay);
     about->setBounds(overlay);
+    notice->setBounds(overlay);
 }
 
 void DeasynthEditor::resized()
@@ -620,10 +627,30 @@ void DeasynthEditor::refreshAll(bool force)
         root->repaint();
 }
 
+void DeasynthEditor::onSurgeError(const std::string &msg, const std::string &title,
+                                  const SurgeStorage::ErrorType &type)
+{
+    if (type == SurgeStorage::AUDIO_INPUT_LATENCY_WARNING)
+        return; // Deasynth has no audio input
+    std::lock_guard<std::mutex> g(errorMutex);
+    if (pendingErrors.size() < 8)
+        pendingErrors.emplace_back(juce::String(title), juce::String(msg));
+}
+
 void DeasynthEditor::timerCallback()
 {
     if (!ctx.synth)
         return;
+
+    {
+        std::vector<std::pair<juce::String, juce::String>> errors;
+        {
+            std::lock_guard<std::mutex> g(errorMutex);
+            errors.swap(pendingErrors);
+        }
+        for (auto &[title, message] : errors)
+            notice->show(title, message);
+    }
 
     // Watchdog: the audio callback zeroes processRunning every block. If it stops being
     // zeroed the host has stopped calling us (transport parked, track frozen, no device), and

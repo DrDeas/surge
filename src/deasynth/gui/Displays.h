@@ -75,7 +75,9 @@ class FilterDisplay : public juce::Component, public Refreshable
 
   private:
     void recompute();
-    bool dragging{false};
+    void endDrag();
+    // the parameters the drag began on; the layer being edited can change under a drag
+    Parameter *dragCutoff{nullptr}, *dragResonance{nullptr};
     juce::Point<float> lastDrag;
 
     EditorContext &ctx;
@@ -94,6 +96,7 @@ class EnvDisplay : public juce::Component, public Refreshable
 {
   public:
     EnvDisplay(EditorContext &ctx, int which, juce::Colour accent);
+    ~EnvDisplay() override { endDrag(); }
 
     void refresh(bool force) override;
     void paint(juce::Graphics &g) override;
@@ -114,7 +117,9 @@ class EnvDisplay : public juce::Component, public Refreshable
 
     // each timed stage takes between stageMin and stageMin + stageSpan of the width
     static constexpr float stageMin = 0.03f, stageSpan = 0.24f, sustainWidth = 0.16f;
+    void endDrag();
     int hot{-1}, grabbed{-1};
+    Parameter *dragTime{nullptr}, *dragSustain{nullptr};
     juce::Point<float> lastDrag;
     EditorContext &ctx;
     int which;

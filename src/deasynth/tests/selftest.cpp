@@ -173,7 +173,36 @@ void testAnalogStage()
     }
     check(transparent, "amount 0 passes audio through untouched");
 
+    // switching the stage in and out during a note must not click: the largest step between
+    // neighbouring samples should stay close to that of the sine itself
+    {
+        deasynth::AnalogStage sw;
+        sw.setSampleRate(48000.0);
+        const float sineStep = 0.7f * (float)(2.0 * M_PI * 220.0 / 48000.0);
+        float prev = 0.f, worst = 0.f;
+        bool back = true;
+        phase = 0.0;
+        for (int b = 0; b < 400; ++b)
+        {
+            fill(0.7f);
+            const float amt = (b >= 100 && b < 200) ? 0.02f : 0.f; // on for a while, then off
+            sw.process(L, R, amt);
+            for (int i = 0; i < BLOCK_SIZE; ++i)
+            {
+                if (b > 0 || i > 0)
+                    worst = std::max(worst, std::abs(L[i] - prev));
+                prev = L[i];
+                if (b >= 300)
+                    back = back && L[i] == ref[i];
+            }
+        }
+        check(worst < sineStep * 1.5f, "engaging and releasing does not click (largest step " +
+                                           std::to_string(worst / sineStep) + "x the signal's own)");
+        check(back, "transparent again once released");
+    }
+
     // full amount: bounded, finite, adds harmonics, leaves no DC
+    stage.reset();
     double sum = 0.0, sumSq = 0.0, fund = 0.0, fundQ = 0.0, refSq = 0.0;
     float peak = 0.f;
     bool finite = true;

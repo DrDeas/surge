@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include "globals.h"
 #include "sst/filters/HalfRateFilter.h"
 
@@ -53,6 +54,7 @@ struct AnalogStage
             dc[c] = 0.f;
         }
         smoothed = 0.f;
+        mix = 0.f;
         active = false;
     }
 
@@ -66,15 +68,22 @@ struct AnalogStage
 
     void process(float *L, float *R, float amount)
     {
-        if (amount <= 1e-4f && smoothed <= 1e-4f)
+        const bool wanted = amount > 1e-4f || smoothed > 1e-4f;
+        if (!wanted && mix <= 0.f)
         {
             if (active)
-            {
                 reset();
-            }
-            return;
+            return; // bypassed: the block is left exactly as it came in
         }
+
+        // The half-band filters delay the signal by a few samples and take a moment to settle
+        // from rest, so switching straight between the bypassed and the processed path would
+        // click. Instead the processed path is faded in and out against the dry signal over
+        // fadeSamples, by which time the filters have settled.
         active = true;
+        float dryL[BLOCK_SIZE], dryR[BLOCK_SIZE];
+        memcpy(dryL, L, sizeof(dryL));
+        memcpy(dryR, R, sizeof(dryR));
 
         float osL alignas(16)[BLOCK_SIZE_OS], osR alignas(16)[BLOCK_SIZE_OS];
         // upsample by zero stuffing (with gain compensation) then half-band filter
@@ -131,6 +140,41 @@ struct AnalogStage
             L[i] = osL[i] - dc[0];
             R[i] = osR[i] - dc[1];
         }
+
+        if (mix < 1.f || !wanted)
+        {
+            const float step = (wanted ? 1.f : -1.f) / (float)fadeSamples;
+            for (int i = 0; i < BLOCK_SIZE; ++i)
+            {
+                mix = std::clamp(mix + step, 0.f, 1.f);
+                // raised cosine, so the fade has no corner at either end
+                const float w = 0.5f - 0.5f * std::cos((float)M_PI * mix);
+                L[i] = dryL[i] + w * (L[i] - dryL[i]);
+                R[i] = dryR[i] + w * (R[i] - dryR[i]);
+            }
+        }
+
+        // A non-finite sample would otherwise live on in the filter states for good.
+        if (!std::isfinite(L[BLOCK_SIZE - 1] + R[BLOCK_SIZE - 1] + dc[0] + dc[1] + shelfPre[0] +
+                           shelfPre[1] + shelfPost[0] + shelfPost[1]))
+        {
+            const float keep = smoothed, keepMix = mix;
+            reset();
+            smoothed = keep;
+            mix = keepMix;
+            active = true;
+            for (int i = 0; i < BLOCK_SIZE; ++i)
+            {
+                if (!std::isfinite(L[i]))
+                    L[i] = 0.f;
+                if (!std::isfinite(R[i]))
+                    R[i] = 0.f;
+            }
+            return;
+        }
+
+        if (!wanted && mix <= 0.f)
+            reset();
     }
 
     sst::filters::HalfRate::HalfRateFilter up, down;
@@ -138,7 +182,9 @@ struct AnalogStage
     float shelfCoef{0.01f}, dcCoef{0.001f};
     float shelfPre[2], shelfPost[2], dc[2];
     float smoothed{0.f};
+    float mix{0.f}; // 0 = dry, 1 = fully through the stage
     bool active{false};
+    static constexpr int fadeSamples = 512;
 };
 } // namespace deasynth
 

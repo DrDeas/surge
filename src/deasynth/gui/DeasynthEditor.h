@@ -18,10 +18,13 @@ class ModBar;
 class PresetBrowser;
 class SaveDialog;
 class AboutPanel;
+class NoticePanel;
 class Wheel;
 } // namespace deasynth
 
-class DeasynthEditor : public juce::AudioProcessorEditor, private juce::Timer
+class DeasynthEditor : public juce::AudioProcessorEditor,
+                       private juce::Timer,
+                       private SurgeStorage::ErrorListener
 {
   public:
     explicit DeasynthEditor(DeasynthProcessor &);
@@ -58,6 +61,9 @@ class DeasynthEditor : public juce::AudioProcessorEditor, private juce::Timer
     struct Root; // the fixed-size design surface; scaled as a whole to the window
 
     void timerCallback() override;
+    // SurgeStorage::ErrorListener. Called from any thread; shown on the next timer tick.
+    void onSurgeError(const std::string &msg, const std::string &title,
+                      const SurgeStorage::ErrorType &type) override;
     void refreshAll(bool force);
     void layoutRoot();
     void paintRoot(juce::Graphics &g);
@@ -93,6 +99,10 @@ class DeasynthEditor : public juce::AudioProcessorEditor, private juce::Timer
     std::unique_ptr<deasynth::PresetBrowser> browser;
     std::unique_ptr<deasynth::SaveDialog> saveDialog;
     std::unique_ptr<deasynth::AboutPanel> about;
+    std::unique_ptr<deasynth::NoticePanel> notice;
+
+    std::mutex errorMutex;
+    std::vector<std::pair<juce::String, juce::String>> pendingErrors; // title, message
 
     int page{Synth};
     int watchdogTick{0};

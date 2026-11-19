@@ -302,7 +302,7 @@ FilterDisplay::FilterDisplay(EditorContext &c, int u)
 {
 }
 
-FilterDisplay::~FilterDisplay() = default;
+FilterDisplay::~FilterDisplay() { endDrag(); }
 
 void FilterDisplay::refresh(bool force)
 {
@@ -410,43 +410,45 @@ void FilterDisplay::mouseExit(const juce::MouseEvent &)
 
 void FilterDisplay::mouseDown(const juce::MouseEvent &e)
 {
+    endDrag();
     auto &fu = ctx.sceneData().filterunit[unit];
     if (e.mods.isPopupMenu() || fu.type.val.i == sst::filters::FilterType::fut_none)
         return;
-    dragging = true;
+    dragCutoff = &fu.cutoff;
+    dragResonance = &fu.resonance;
     lastDrag = e.position;
-    ctx.beginEdit(&fu.cutoff);
-    ctx.beginEdit(&fu.resonance);
+    ctx.beginEdit(dragCutoff);
+    ctx.beginEdit(dragResonance);
 }
 
 void FilterDisplay::mouseDrag(const juce::MouseEvent &e)
 {
-    if (!dragging)
+    if (!dragCutoff)
         return;
-    auto &fu = ctx.sceneData().filterunit[unit];
     const float fine = e.mods.isShiftDown() ? 0.2f : 1.f;
     const float dx = (e.position.x - lastDrag.x) / (float)std::max(1, getWidth());
     const float dy = (lastDrag.y - e.position.y) / (float)std::max(1, getHeight());
     lastDrag = e.position;
     // the picture spans 20 Hz to 20 kHz, about ten octaves of the cutoff control's range
-    const float span = fu.cutoff.val_max.f - fu.cutoff.val_min.f;
+    const float span = dragCutoff->val_max.f - dragCutoff->val_min.f;
     if (dx != 0.f)
-        ctx.setValue01(&fu.cutoff, fu.cutoff.get_value_f01() + dx * fine * 120.f / std::max(1.f, span));
+        ctx.setValue01(dragCutoff, dragCutoff->get_value_f01() + dx * fine * 120.f / std::max(1.f, span));
     if (dy != 0.f)
-        ctx.setValue01(&fu.resonance, fu.resonance.get_value_f01() + dy * fine);
+        ctx.setValue01(dragResonance, dragResonance->get_value_f01() + dy * fine);
     if (ctx.setHint)
-        ctx.setHint(juce::String("Cutoff ") + fu.cutoff.get_display() + ":  Resonance " +
-                    fu.resonance.get_display());
+        ctx.setHint(juce::String("Cutoff ") + dragCutoff->get_display() + ":  Resonance " +
+                    dragResonance->get_display());
 }
 
-void FilterDisplay::mouseUp(const juce::MouseEvent &)
+void FilterDisplay::mouseUp(const juce::MouseEvent &) { endDrag(); }
+
+void FilterDisplay::endDrag()
 {
-    if (!dragging)
+    if (!dragCutoff)
         return;
-    dragging = false;
-    auto &fu = ctx.sceneData().filterunit[unit];
-    ctx.endEdit(&fu.cutoff);
-    ctx.endEdit(&fu.resonance);
+    ctx.endEdit(dragCutoff);
+    ctx.endEdit(dragResonance);
+    dragCutoff = dragResonance = nullptr;
 }
 
 void FilterDisplay::paint(juce::Graphics &g)
@@ -565,64 +567,59 @@ void EnvDisplay::mouseExit(const juce::MouseEvent &)
 
 void EnvDisplay::mouseDown(const juce::MouseEvent &e)
 {
+    endDrag();
     grabbed = e.mods.isPopupMenu() ? -1 : handleAt(e.position);
     if (grabbed < 0)
         return;
     lastDrag = e.position;
     auto &eg = ctx.sceneData().adsr[which];
-    if (grabbed == 0)
-        ctx.beginEdit(&eg.a);
-    else if (grabbed == 1)
-    {
-        ctx.beginEdit(&eg.d);
-        ctx.beginEdit(&eg.s);
-    }
-    else
-        ctx.beginEdit(&eg.r);
+    dragTime = grabbed == 0 ? &eg.a : (grabbed == 1 ? &eg.d : &eg.r);
+    dragSustain = grabbed == 1 ? &eg.s : nullptr;
+    ctx.beginEdit(dragTime);
+    if (dragSustain)
+        ctx.beginEdit(dragSustain);
 }
 
 void EnvDisplay::mouseDrag(const juce::MouseEvent &e)
 {
-    if (grabbed < 0)
+    if (!dragTime)
         return;
-    auto &eg = ctx.sceneData().adsr[which];
     const auto gm = geometry();
     const float fine = e.mods.isShiftDown() ? 0.2f : 1.f;
     const float dx = (e.position.x - lastDrag.x) / (stageSpan * gm.area.getWidth()) * fine;
     const float dy = (lastDrag.y - e.position.y) / gm.area.getHeight() * fine;
     lastDrag = e.position;
 
-    Parameter *timeParam = grabbed == 0 ? &eg.a : (grabbed == 1 ? &eg.d : &eg.r);
     if (dx != 0.f)
-        ctx.setValue01(timeParam, timeParam->get_value_f01() + dx);
-    if (grabbed == 1 && dy != 0.f)
-        ctx.setValue01(&eg.s, eg.s.get_value_f01() + dy);
+        ctx.setValue01(dragTime, dragTime->get_value_f01() + dx);
+    if (dragSustain && dy != 0.f)
+        ctx.setValue01(dragSustain, dragSustain->get_value_f01() + dy);
 
     if (ctx.setHint)
     {
-        juce::String h = juce::String(timeParam->get_name()) + " " + timeParam->get_display();
-        if (grabbed == 1)
-            h += juce::String(":  Sustain ") + eg.s.get_display();
+        juce::String h = juce::String(dragTime->get_name()) + " " + dragTime->get_display();
+        if (dragSustain)
+            h += juce::String(":  Sustain ") + dragSustain->get_display();
         ctx.setHint(h);
     }
 }
 
 void EnvDisplay::mouseUp(const juce::MouseEvent &e)
 {
-    if (grabbed < 0)
+    if (!dragTime)
         return;
-    auto &eg = ctx.sceneData().adsr[which];
-    if (grabbed == 0)
-        ctx.endEdit(&eg.a);
-    else if (grabbed == 1)
-    {
-        ctx.endEdit(&eg.d);
-        ctx.endEdit(&eg.s);
-    }
-    else
-        ctx.endEdit(&eg.r);
-    grabbed = -1;
+    endDrag();
     mouseMove(e);
+}
+
+void EnvDisplay::endDrag()
+{
+    if (dragTime)
+        ctx.endEdit(dragTime);
+    if (dragSustain)
+        ctx.endEdit(dragSustain);
+    dragTime = dragSustain = nullptr;
+    grabbed = -1;
 }
 
 void EnvDisplay::paint(juce::Graphics &g)

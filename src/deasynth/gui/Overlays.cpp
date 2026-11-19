@@ -570,18 +570,40 @@ void SaveDialog::commit()
         repaint();
         return;
     }
-    if (n.containsAnyOf("/\\:*?\"<>|") || c.containsAnyOf(":*?\"<>|") || c.contains(".."))
+    if (n.containsAnyOf("/\\:*?\"<>|") || c.containsAnyOf(":*?\"<>|") || c.contains("..") ||
+        c.startsWithChar('/') || c.startsWithChar('\\'))
     {
-        error = "Names cannot contain / \\ : * ? \" < > | or \"..\"";
+        error = "Names cannot contain / \\ : * ? \" < > | or \"..\", and a category cannot "
+                "start with a slash";
         repaint();
         return;
     }
 
     auto &patch = ctx.patch();
+    const auto oldName = patch.name, oldCategory = patch.category, oldAuthor = patch.author;
     patch.name = n.toStdString();
     patch.category = (c.isEmpty() ? juce::String("My Patches") : c).toStdString();
     patch.author = author.getText().trim().toStdString();
+
+    // The engine reports a failed save through its error channel and writes nothing, so the
+    // only proof of success is the file: it must exist and have been written just now.
+    const auto file = juce::File(juce::String(ctx.synth->storage.userPatchesPath.u8string()))
+                          .getChildFile(juce::String(patch.category))
+                          .getChildFile(n + ".fxp");
+    const auto before = juce::Time::getCurrentTime() - juce::RelativeTime::seconds(2.0);
     ctx.synth->savePatch();
+
+    if (!file.existsAsFile() || file.getLastModificationTime() < before)
+    {
+        patch.name = oldName;
+        patch.category = oldCategory;
+        patch.author = oldAuthor;
+        error = "The patch could not be saved. Check that " +
+                juce::String(ctx.synth->storage.userPatchesPath.u8string()) + " can be written to.";
+        repaint();
+        return;
+    }
+
     patch.isDirty = false;
     setVisible(false);
     if (ctx.structureChanged)
@@ -633,6 +655,44 @@ void SaveDialog::paint(juce::Graphics &g)
         g.drawFittedText(error, card.reduced(24).removeFromBottom(32).withTrimmedRight(210),
                          juce::Justification::centredLeft, 2);
     }
+}
+
+//==============================================================================
+void NoticePanel::show(const juce::String &t, const juce::String &m)
+{
+    // several reports in a row are shown together rather than replacing one another
+    if (isVisible() && message.isNotEmpty() && !message.contains(m))
+        message << "\n\n" << m;
+    else
+        message = m;
+    title = t;
+    setVisible(true);
+    setWantsKeyboardFocus(true);
+    toFront(true);
+    repaint();
+}
+
+void NoticePanel::paint(juce::Graphics &g)
+{
+    g.fillAll(juce::Colours::black.withAlpha(0.65f));
+    auto card = getLocalBounds().withSizeKeepingCentre(560, 300);
+    g.setColour(theme::panel);
+    g.fillRoundedRectangle(card.toFloat(), 12.f);
+    g.setColour(theme::danger.withAlpha(0.8f));
+    g.drawRoundedRectangle(card.toFloat().reduced(0.5f), 12.f, 1.f);
+
+    auto b = card.reduced(28, 24);
+    g.setColour(theme::text);
+    g.setFont(theme::font(18.f, true));
+    g.drawFittedText(title, b.removeFromTop(34), juce::Justification::centredLeft, 1);
+    b.removeFromTop(8);
+    auto foot = b.removeFromBottom(22);
+    g.setColour(theme::textDim);
+    g.setFont(theme::font(13.5f));
+    g.drawFittedText(message, b, juce::Justification::topLeft, 12);
+    g.setColour(theme::textFaint);
+    g.setFont(theme::font(12.f));
+    g.drawText("Click anywhere to dismiss", foot, juce::Justification::centredLeft);
 }
 
 //==============================================================================

@@ -134,6 +134,23 @@ class SaveDialog : public juce::Component
     juce::String error;
 };
 
+/** A message from the engine (a patch that would not load or save, a missing wavetable). */
+class NoticePanel : public juce::Component
+{
+  public:
+    void show(const juce::String &title, const juce::String &message);
+    void paint(juce::Graphics &g) override;
+    void mouseDown(const juce::MouseEvent &) override { setVisible(false); }
+    bool keyPressed(const juce::KeyPress &) override
+    {
+        setVisible(false);
+        return true;
+    }
+
+  private:
+    juce::String title, message;
+};
+
 class AboutPanel : public juce::Component
 {
   public:

@@ -767,10 +767,11 @@ void ParamControl::showChoiceMenu()
     }
 
     juce::Component::SafePointer<ParamControl> safe(this);
+    auto *opened = param; // the control may be pointed elsewhere while the menu is up
     menu.showMenuAsync(juce::PopupMenu::Options().withTargetComponent(this).withParentComponent(
                            menuParentFor(*this)),
-                       [safe, lo](int r) {
-                           if (r > 0 && safe)
+                       [safe, lo, opened](int r) {
+                           if (r > 0 && safe && safe->param == opened)
                                safe->setIntValue(r - 1 + lo);
                        });
 }
@@ -835,8 +836,8 @@ void ParamControl::showContextMenu()
     menu.showMenuAsync(
         juce::PopupMenu::Options().withTargetComponent(this).withParentComponent(
             menuParentFor(*this)),
-        [safe, sources](int r) {
-            if (!safe || r <= 0 || !safe->usable())
+        [safe, sources, opened = param](int r) {
+            if (!safe || r <= 0 || !safe->usable() || safe->param != opened)
                 return;
             auto &self = *safe;
             auto *p = self.param;
@@ -900,17 +901,16 @@ void ParamControl::showTypeIn()
     typeIn->grabKeyboardFocus();
 
     juce::Component::SafePointer<ParamControl> safe(this);
-    auto close = [safe]() {
-        if (safe)
-        {
-            juce::MessageManager::callAsync([safe]() {
-                if (safe)
-                {
-                    safe->typeIn.reset();
-                    safe->repaint();
-                }
-            });
-        }
+    auto *box = typeIn.get();
+    auto close = [safe, box]() {
+        juce::MessageManager::callAsync([safe, box]() {
+            // only if this is still the box that asked; a newer one may have replaced it
+            if (safe && safe->typeIn.get() == box)
+            {
+                safe->typeIn.reset();
+                safe->repaint();
+            }
+        });
     };
 
     typeIn->onReturnKey = [safe, close]() {
