@@ -665,6 +665,17 @@ void DeasynthEditor::timerCallback()
         force = true;
     }
 
+    // Follow the wheels of a MIDI controller (or host automation of them). The engine
+    // records the last pitch bend and mod wheel it received; a wheel the mouse is holding
+    // is left alone so it does not fight the drag.
+    if (ctx.synth->hasUpdatedMidiCC.exchange(0))
+    {
+        if (!pitchWheel->isMouseButtonDown())
+            pitchWheel->setValue((float)ctx.synth->pitchbendMIDIVal.load() / 8192.f);
+        if (!modWheel->isMouseButtonDown())
+            modWheel->setValue((float)ctx.synth->modwheelCC.load() / 127.f);
+    }
+
     // a patch load, or the host, may have changed which layer is active
     const int active = juce::jlimit(0, n_scenes - 1, ctx.patch().scene_active.val.i);
     if (active != ctx.scene && shownScene == ctx.scene)

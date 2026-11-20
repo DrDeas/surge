@@ -462,6 +462,21 @@ void testEditor(const juce::String &snapshotDir)
         }
     }
 
+    {
+        // wheels moved on a MIDI controller must reach the engine's "last seen" values,
+        // which is what the on-screen wheels follow
+        juce::MidiBuffer wheels;
+        wheels.addEvent(juce::MidiMessage::controllerEvent(1, 1, 100), 0);
+        wheels.addEvent(juce::MidiMessage::pitchWheel(1, 8192 + 4096), 0);
+        render(p, 1, &wheels);
+        check(p.surge->modwheelCC.load() == 100, "mod wheel from MIDI is reported for the display");
+        check(p.surge->pitchbendMIDIVal.load() == 4096, "pitch bend from MIDI is reported for the display");
+        juce::MidiBuffer centre;
+        centre.addEvent(juce::MidiMessage::controllerEvent(1, 1, 0), 0);
+        centre.addEvent(juce::MidiMessage::pitchWheel(1, 8192), 0);
+        render(p, 1, &centre);
+    }
+
     ed->setScene(1);
     ed->setPage(0);
     check(ed->context().scene == 1, "switches to layer B");
