@@ -95,6 +95,13 @@ fi
 GENERATOR=()
 command -v ninja >/dev/null && GENERATOR=(-G Ninja)
 
+# The .icns inside the bundles is generated from DeasynthIcon.png when CMake configures.
+# Drop any generated copy that is older than the PNG, so a changed icon is always rebuilt.
+ICON_PNG="$ROOT/resources/deasynth/DeasynthIcon.png"
+if [[ -d "$BUILD/src/deasynth" && -f "$ICON_PNG" ]]; then
+  find "$BUILD/src/deasynth" -name Icon.icns ! -newer "$ICON_PNG" -delete
+fi
+
 say "Configuring ($CONFIG, $ARCHS)"
 cmake -S . -B "$BUILD" ${GENERATOR[@]+"${GENERATOR[@]}"} \
   -DCMAKE_BUILD_TYPE="$CONFIG" \
@@ -179,6 +186,14 @@ if [[ $INSTALL -eq 1 ]]; then
 
   # make macOS re-read the Audio Unit so Logic sees the new build
   killall -9 AudioComponentRegistrar 2>/dev/null || true
+
+  # Finder, the Dock and Launchpad cache app icons by bundle. Mark the installed app as
+  # changed and re-register it so a new icon is picked up without logging out.
+  touch "$APPDEST/Deasynth.app"
+  LSREGISTER="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
+  if [[ -x "$LSREGISTER" ]]; then
+    "$LSREGISTER" -f "$APPDEST/Deasynth.app" || true
+  fi
 
   if [[ $AUVAL -eq 1 ]]; then
     say "Validating the Audio Unit (auval -v aumu Deas Eldr)"
