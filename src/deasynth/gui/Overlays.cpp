@@ -78,10 +78,13 @@ void ModBar::sourceMenu(int source)
 
 void ModBar::refresh(bool force)
 {
+    // the engine works out which sources are routed anywhere in one pass; read that once
+    // here rather than asking per chip, which would redo the pass (and take its lock) each time
+    ctx.synth->updateUsedState();
     for (auto &chip : chips)
     {
         chip.button->setOn(ctx.armedSource == chip.source);
-        chip.button->setMarker(ctx.synth->isModsourceUsed((modsources)chip.source));
+        chip.button->setMarker(ctx.synth->modsourceused[chip.source]);
         if (chip.source >= ms_ctrl1 && chip.source <= ms_ctrl8)
             chip.button->setTooltip(ctx.nameForSource(chip.source));
         else

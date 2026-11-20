@@ -147,6 +147,150 @@ void testOscillators()
     }
 }
 
+/*
+ * Every source in the Modulate strip, routed to the filter cutoff, has to change the sound.
+ * The filter starts nearly closed, so a source that works opens (or closes) it audibly; the
+ * check is that the level moves by more than run-to-run variation could explain.
+ */
+void testModulationSources()
+{
+    std::cout << "Modulation sources" << std::endl;
+
+    struct Source
+    {
+        int ms;
+        const char *name;
+    };
+    static const Source sources[] = {
+        {ms_velocity, "Velocity"},      {ms_keytrack, "Key tracking"},
+        {ms_aftertouch, "Channel aftertouch"}, {ms_polyaftertouch, "Poly aftertouch"},
+        {ms_modwheel, "Mod wheel"},     {ms_pitchbend, "Pitch bend"},
+        {ms_filtereg, "Filter envelope"}, {ms_ampeg, "Amp envelope"},
+        {ms_lfo1, "LFO 1"},   {ms_lfo2, "LFO 2"},   {ms_lfo3, "LFO 3"},
+        {ms_lfo4, "LFO 4"},   {ms_lfo5, "LFO 5"},   {ms_lfo6, "LFO 6"},
+        {ms_slfo1, "S-LFO 1"}, {ms_slfo2, "S-LFO 2"}, {ms_slfo3, "S-LFO 3"},
+        {ms_slfo4, "S-LFO 4"}, {ms_slfo5, "S-LFO 5"}, {ms_slfo6, "S-LFO 6"},
+        {ms_ctrl1, "Macro 1"}, {ms_ctrl2, "Macro 2"}, {ms_ctrl3, "Macro 3"},
+        {ms_ctrl4, "Macro 4"}, {ms_ctrl5, "Macro 5"}, {ms_ctrl6, "Macro 6"},
+        {ms_ctrl7, "Macro 7"}, {ms_ctrl8, "Macro 8"},
+        {ms_random_bipolar, "Random"},  {ms_alternate_bipolar, "Alternate"},
+    };
+
+    // one fixed performance: three notes, hard, with every controller pushed
+    auto perform = [](DeasynthProcessor &p) {
+        juce::MidiBuffer m;
+        for (int n : {72, 76, 79})
+            m.addEvent(juce::MidiMessage::noteOn(1, n, (juce::uint8)127), 0);
+        m.addEvent(juce::MidiMessage::controllerEvent(1, 1, 127), 1);
+        m.addEvent(juce::MidiMessage::pitchWheel(1, 16383), 1);
+        m.addEvent(juce::MidiMessage::channelPressureChange(1, 127), 1);
+        for (int n : {72, 76, 79})
+            m.addEvent(juce::MidiMessage::aftertouchChange(1, n, 127), 1);
+        return render(p, 50, &m).rms;
+    };
+
+    auto setup = [](DeasynthProcessor &p) {
+        p.prepareToPlay(48000.0, 512);
+        *p.vintageParam = 0.f;
+        auto &s = *p.surge;
+        auto &sc = s.storage.getPatch().scene[0];
+        auto setF = [&](Parameter &par, float v) {
+            s.setParameter01(s.idForParameter(&par), par.value_to_normalized(v));
+        };
+        setF(sc.drift, 0.f);
+        setF(sc.filterunit[0].cutoff, -36.f); // about 55 Hz: nearly shut for these notes
+        setF(sc.filterunit[0].envmod, 0.f);
+        setF(sc.filterunit[0].keytrack, 0.f);
+        setF(sc.filterunit[0].resonance, 0.f);
+        setF(sc.pbrange_up, 0.f); // so pitch bend only acts through the routing under test
+        for (int m = 0; m < n_customcontrollers; ++m)
+            s.setMacroParameter01(m, 1.f);
+        render(p, 4);
+    };
+
+    double baseline[3];
+    for (auto &b : baseline)
+    {
+        DeasynthProcessor p;
+        if (!p.surge)
+            return;
+        setup(p);
+        b = perform(p);
+    }
+    const double base = (baseline[0] + baseline[1] + baseline[2]) / 3.0;
+    const double spread = std::max({std::abs(baseline[0] - base), std::abs(baseline[1] - base),
+                                    std::abs(baseline[2] - base)});
+    // with the filter shut the baseline is close to silence, so judge it in absolute terms
+    check(base < 0.005 && spread < 0.002,
+          "baseline, filter shut, is quiet and repeatable (rms " + std::to_string(base) + ", spread " +
+              std::to_string(spread) + ")");
+
+    for (const auto &src : sources)
+    {
+        DeasynthProcessor p;
+        setup(p);
+        auto &s = *p.surge;
+        auto &cutoff = s.storage.getPatch().scene[0].filterunit[0].cutoff;
+        const auto ms = (modsources)src.ms;
+
+        const bool valid = s.isValidModulation(cutoff.id, ms);
+        s.setModDepth01(cutoff.id, ms, 0, 0, 0.5f);
+        const bool active = s.isActiveModulation(cutoff.id, ms, 0, 0);
+        const bool depthOk = std::abs(s.getModDepth01(cutoff.id, ms, 0, 0) - 0.5f) < 1e-3f;
+        s.updateUsedState();
+        const bool shownUsed = s.modsourceused[src.ms];
+
+        // Random and Alternate take a new value on each note, and either can come up near
+        // zero or negative on a given note, so judge them over a few performances
+        double biggest = 0.0;
+        const int tries = (src.ms == ms_random_bipolar || src.ms == ms_alternate_bipolar) ? 4 : 1;
+        for (int t = 0; t < tries; ++t)
+        {
+            const double r = perform(p);
+            biggest = std::max(biggest, std::abs(r - base));
+            juce::MidiBuffer off;
+            off.addEvent(juce::MidiMessage::allNotesOff(1), 0);
+            for (int n : {72, 76, 79})
+                off.addEvent(juce::MidiMessage::noteOff(1, n), 0);
+            render(p, 300, &off);
+        }
+        const bool audible = biggest > std::max(0.004, spread * 4.0);
+
+        s.clearModulation(cutoff.id, ms, 0, 0, false);
+        const bool cleared = !s.isActiveModulation(cutoff.id, ms, 0, 0);
+
+        check(valid && active && depthOk && shownUsed && audible && cleared,
+              std::string(src.name) + " modulates (level change " + std::to_string(biggest / base) +
+                  "x baseline" + (valid ? "" : ", NOT VALID") + (active ? "" : ", NOT ACTIVE") +
+                  (depthOk ? "" : ", DEPTH WRONG") + (shownUsed ? "" : ", NOT MARKED USED") +
+                  (audible ? "" : ", NO AUDIBLE EFFECT") + (cleared ? "" : ", NOT CLEARED") + ")");
+    }
+
+    // what Random and Alternate actually put out, note by note
+    {
+        DeasynthProcessor p;
+        setup(p);
+        auto &scene = p.surge->storage.getPatch().scene[0];
+        std::vector<float> alt, rnd;
+        for (int i = 0; i < 6; ++i)
+        {
+            auto on = noteOn(60 + i);
+            render(p, 1, &on);
+            alt.push_back(scene.modsources[ms_alternate_bipolar]->get_output(0));
+            rnd.push_back(scene.modsources[ms_random_bipolar]->get_output(0));
+        }
+        bool flips = true, inRange = true, varies = false;
+        for (size_t i = 0; i < alt.size(); ++i)
+        {
+            flips = flips && std::abs(std::abs(alt[i]) - 1.f) < 1e-6f && (i == 0 || alt[i] == -alt[i - 1]);
+            inRange = inRange && rnd[i] >= -1.f && rnd[i] <= 1.f;
+            varies = varies || (i > 0 && rnd[i] != rnd[0]);
+        }
+        check(flips, "Alternate flips between -1 and +1 on each new note");
+        check(inRange && varies, "Random gives each new note a different value within -1...+1");
+    }
+}
+
 void testAnalogStage()
 {
     std::cout << "Output stage (Warmth)" << std::endl;
@@ -505,6 +649,7 @@ int main(int argc, char **argv)
 
     testAudio();
     testOscillators();
+    testModulationSources();
     testAnalogStage();
     testVintage();
     testState();

@@ -425,7 +425,7 @@ void LfoPanel::refresh(bool force)
     for (int i = 0; i < n_lfos; ++i)
     {
         tabs[i]->setOn(i == current);
-        tabs[i]->setMarker(ctx.synth->isModsourceUsed((modsources)(ms_lfo1 + i)));
+        tabs[i]->setMarker(ctx.synth->modsourceused[ms_lfo1 + i]); // refreshed by the strip
     }
     const bool armed = ctx.armedSource == ms_lfo1 + current;
     assign->setOn(armed);
@@ -573,7 +573,7 @@ void MacroPanel::refresh(bool force)
         knobs[i]->label = name;
         const bool armed = ctx.armedSource == ms_ctrl1 + i;
         assign[i]->setOn(armed);
-        assign[i]->setMarker(ctx.synth->isModsourceUsed((modsources)(ms_ctrl1 + i)));
+        assign[i]->setMarker(ctx.synth->modsourceused[ms_ctrl1 + i]); // refreshed by the strip
     }
     Panel::refresh(force);
 }
