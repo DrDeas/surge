@@ -39,11 +39,13 @@ else
   xvfb-run -a -s "-screen 0 1400x900x24 -noreset" "$TOOL" --render-demo "$WORK"
 fi
 
+# The patches differ a lot in level, so the soundtrack is levelled to a broadcast-style
+# loudness as it is encoded.
 echo "Encoding $OUT"
 ffmpeg -hide_banner -loglevel error -y \
   -framerate 30 -i "$WORK/frame-%05d.jpg" -i "$WORK/soundtrack.wav" \
   -c:v libx264 -preset slow -crf 17 -pix_fmt yuv420p -movflags +faststart \
-  -c:a aac -b:a 256k -shortest "$OUT"
+  -af "loudnorm=I=-16:TP=-1.5:LRA=9" -ar 48000 -c:a aac -b:a 256k -shortest "$OUT"
 
 echo "Done: $OUT"
 echo "Frames and soundtrack are in $WORK"

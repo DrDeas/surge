@@ -545,9 +545,10 @@ struct Demo : juce::Timer
 
         clickOn(64.2, [this]() { return button("SYNTH"); });
         clickOn(65.2, [this]() { return buttonWithTip("by category"); }); // the patch name
-        moveTo(65.4, 65.9, menuItem(0, 3));                               // Basses
+        // rows of the menu: 0 browser, 1 Favorites, then the factory categories from Basses
+        moveTo(65.4, 65.9, menuItem(0, 2)); // Basses
         moveTo(66.3, 66.9, menuItem(1, 4));
-        moveTo(66.9, 67.3, menuItem(0, 7)); // Keys
+        moveTo(66.9, 67.3, menuItem(0, 6)); // Keys
         moveTo(67.7, 68.3, menuItem(1, 3));
         when(68.6, [this]() {
             juce::PopupMenu::dismissAllActiveMenus();
@@ -576,8 +577,8 @@ struct Demo : juce::Timer
                   {prog[bar % 4][0] - 12, prog[bar % 4][0], prog[bar % 4][1], prog[bar % 4][2], prog[bar % 4][3]});
         }
         camera(76.6, 640, 400, 1.25f);
-        camera(77.6, 330, 640, 2.0f);
-        camera(83.6, 330, 640, 2.0f);
+        camera(77.6, 330, 700, 2.0f);
+        camera(83.6, 330, 700, 2.0f);
         camera(85.2, 640, 400, 1.12f);
         camera(90.0, 640, 400, 1.2f);
         turn(78.0, 80.2, [this]() { return valueKnob("Vintage"); }, 110.f);
@@ -691,7 +692,7 @@ struct Demo : juce::Timer
         cx = (2.f * halfW >= W + 2.f * margin) ? W * 0.5f
                                                : juce::jlimit(halfW - margin, W - halfW + margin, cx);
         // the captions cover the bottom of the frame, so the window may run under them
-        const float lowest = H - below + 150.f / zoom;
+        const float lowest = H - below + 330.f / zoom;
         cy = (above + below >= H + 2.f * margin) ? juce::jmin(cy, H * 0.5f + 40.f / zoom)
                                                  : juce::jlimit(above - margin, juce::jmax(above - margin, lowest), cy);
     }
