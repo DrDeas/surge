@@ -214,7 +214,8 @@ class FlatButton : public juce::Component, public juce::SettableTooltipClient
         Save,
         Close,
         Dropdown,
-        Library
+        Library,
+        Heart // outline when off, filled when on
     };
 
     explicit FlatButton(const juce::String &text = {}, juce::Colour accent = theme::osc);
@@ -329,6 +330,8 @@ void knob(juce::Graphics &g, juce::Rectangle<float> area, float value01, bool bi
 void modRing(juce::Graphics &g, juce::Rectangle<float> area, float value01, float depth,
              juce::Colour colour);
 void displayWell(juce::Graphics &g, juce::Rectangle<float> r);
+/** A heart fitted in the area; the caller sets the colour and fills or strokes it. */
+juce::Path heart(juce::Rectangle<float> area);
 void captionBelow(juce::Graphics &g, juce::Rectangle<int> area, const juce::String &text,
                   juce::Colour c);
 /** Shorten a parameter name so it reads at caption size ("Unison Detune" -> "Uni Detune"). */

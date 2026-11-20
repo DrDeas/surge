@@ -90,7 +90,8 @@ class PresetBrowser : public juce::Component, private juce::TextEditor::Listener
     struct PatchModel;
     struct CategoryEntry
     {
-        int category; // index into patch_category, -1 = everything, -2 = section header
+        // index into patch_category, or: -1 everything, -2 section header, -3 favourites
+        int category;
         juce::String label;
         int count;
     };
@@ -110,6 +111,8 @@ class PresetBrowser : public juce::Component, private juce::TextEditor::Listener
     void textEditorTextChanged(juce::TextEditor &) override { rebuildPatches(); }
     void rebuildPatches();
     void selectCategory(int row);
+    /** Mark or unmark the patch in a row as a favourite. */
+    void toggleFavoriteRow(int row);
     /** Load the patch in a row of the list and show it selected. */
     void choosePatchRow(int row);
     /** Move the selection by a number of rows (arrow keys, page keys). */

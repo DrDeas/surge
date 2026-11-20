@@ -262,6 +262,8 @@ DeasynthProcessor::DeasynthProcessor()
     surge->juceWrapperType = getWrapperTypeDescription(wrapperType);
     surge->activateExtraOutputs = false;
 
+    favorites.attach(surge->storage);
+
     applyDeasynthInit(*surge);
 
     {

@@ -69,6 +69,8 @@ juce_add_plugin(${PROJECT_NAME}
 target_sources(${PROJECT_NAME} PRIVATE
   DeasynthProcessor.cpp
   DeasynthProcessor.h
+  Favorites.cpp
+  Favorites.h
   dsp/AnalogStage.h
   gui/DeasynthEditor.cpp
   gui/DeasynthEditor.h
@@ -128,6 +130,7 @@ if(DEASYNTH_BUILD_SELFTEST)
     tests/selftest.cpp
     tests/presetgen.cpp
     DeasynthProcessor.cpp
+    Favorites.cpp
     gui/DeasynthEditor.cpp
     gui/Displays.cpp
     gui/Overlays.cpp

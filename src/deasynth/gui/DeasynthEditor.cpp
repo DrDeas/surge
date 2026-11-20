@@ -107,6 +107,10 @@ DeasynthEditor::DeasynthEditor(DeasynthProcessor &p)
     browseButton->setTooltip("Open the patch browser (search, and step through with the arrow keys)");
     browseButton->onClick = [this]() { showBrowser(true); };
     root->addAndMakeVisible(*browseButton);
+    favoriteButton = std::make_unique<FlatButton>(juce::String(), theme::shaper);
+    favoriteButton->setGlyph(FlatButton::Glyph::Heart);
+    favoriteButton->onClick = [this]() { toggleCurrentFavorite(); };
+    root->addAndMakeVisible(*favoriteButton);
     prevPreset = std::make_unique<FlatButton>();
     prevPreset->setGlyph(FlatButton::Glyph::Prev);
     prevPreset->setTooltip("Previous patch");
@@ -253,11 +257,13 @@ void DeasynthEditor::layoutRoot()
 
     browseButton->setBounds(header.removeFromLeft(30));
     header.removeFromLeft(5);
-    prevPreset->setBounds(header.removeFromLeft(26));
+    favoriteButton->setBounds(header.removeFromLeft(28));
+    header.removeFromLeft(5);
+    prevPreset->setBounds(header.removeFromLeft(24));
     header.removeFromLeft(3);
-    presetName->setBounds(header.removeFromLeft(226));
+    presetName->setBounds(header.removeFromLeft(204));
     header.removeFromLeft(3);
-    nextPreset->setBounds(header.removeFromLeft(26));
+    nextPreset->setBounds(header.removeFromLeft(24));
     header.removeFromLeft(6);
     savePreset->setBounds(header.removeFromLeft(30));
 
@@ -510,6 +516,29 @@ void DeasynthEditor::showAbout(bool show)
         about->toFront(true);
 }
 
+void DeasynthEditor::showNotice(const juce::String &title, const juce::String &message)
+{
+    notice->show(title, message);
+}
+
+void DeasynthEditor::toggleCurrentFavorite()
+{
+    auto &storage = ctx.synth->storage;
+    const int id = currentLibraryPatch();
+    if (id < 0)
+    {
+        showNotice("Favorites", "Only patches in the library can be favorites. Save this sound "
+                                "as a patch first, then mark it.");
+        return;
+    }
+    if (!processor.favorites.toggle(storage.patch_list[(size_t)id]))
+    {
+        showNotice("Favorites", "The favourites list could not be saved to\n" +
+                                    processor.favorites.getFile().getFullPathName());
+    }
+    pendingStructure = true;
+}
+
 int DeasynthEditor::currentLibraryPatch() const
 {
     // The engine keeps the index of the last library patch it loaded even after the sound
@@ -531,6 +560,26 @@ void DeasynthEditor::showPatchMenu()
 
     juce::PopupMenu menu;
     menu.addItem("Open patch browser...", [this]() { showBrowser(true); });
+    {
+        processor.favorites.reload();
+        juce::PopupMenu favs;
+        int n = 0;
+        bool hasCurrent = false;
+        for (int id : storage.patchOrdering)
+        {
+            if (id < 0 || id >= (int)storage.patch_list.size() ||
+                !processor.favorites.contains(storage.patch_list[(size_t)id]))
+                continue;
+            if (n > 0 && n % 34 == 0)
+                favs.addColumnBreak();
+            favs.addItem(id + 1, storage.patch_list[(size_t)id].name, true, id == current);
+            hasCurrent = hasCurrent || id == current;
+            ++n;
+        }
+        if (n == 0)
+            favs.addItem(-1, "Click the heart to add the loaded patch", false);
+        menu.addSubMenu("Favorites", favs, true, nullptr, hasCurrent);
+    }
     menu.addSeparator();
 
     if (storage.patch_list.empty())
@@ -726,6 +775,15 @@ void DeasynthEditor::refreshAll(bool force)
 
     for (int i = 0; i < 2; ++i)
         sceneButtons[i]->setOn(ctx.scene == i);
+
+    {
+        const int id = currentLibraryPatch();
+        const bool fav = id >= 0 && processor.favorites.contains(ctx.synth->storage.patch_list[(size_t)id]);
+        favoriteButton->setOn(fav);
+        favoriteButton->setTooltip(id < 0 ? "Favorites: save this sound as a patch to be able to mark it"
+                                          : (fav ? "Remove this patch from your favorites"
+                                                 : "Add this patch to your favorites"));
+    }
 
     const auto name = currentPatchName();
     const bool dirty = ctx.patch().isDirty;

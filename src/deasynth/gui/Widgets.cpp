@@ -208,6 +208,19 @@ void modRing(juce::Graphics &g, juce::Rectangle<float> area, float v, float dept
     g.fillEllipse(juce::Rectangle<float>(4.4f, 4.4f).withCentre(c.getPointOnCircumference(rr, a1)));
 }
 
+juce::Path heart(juce::Rectangle<float> a)
+{
+    const float x = a.getX(), y = a.getY(), w = a.getWidth(), h = a.getHeight();
+    juce::Path p;
+    p.startNewSubPath(x + w * 0.5f, y + h * 0.95f);
+    p.cubicTo(x + w * 0.10f, y + h * 0.66f, x - w * 0.04f, y + h * 0.34f, x + w * 0.10f, y + h * 0.16f);
+    p.cubicTo(x + w * 0.24f, y - h * 0.02f, x + w * 0.44f, y + h * 0.04f, x + w * 0.5f, y + h * 0.26f);
+    p.cubicTo(x + w * 0.56f, y + h * 0.04f, x + w * 0.76f, y - h * 0.02f, x + w * 0.90f, y + h * 0.16f);
+    p.cubicTo(x + w * 1.04f, y + h * 0.34f, x + w * 0.90f, y + h * 0.66f, x + w * 0.5f, y + h * 0.95f);
+    p.closeSubPath();
+    return p;
+}
+
 void displayWell(juce::Graphics &g, juce::Rectangle<float> r)
 {
     g.setColour(theme::well);
@@ -1084,6 +1097,16 @@ void FlatButton::paint(juce::Graphics &g)
                                   : content.removeFromRight(14).toFloat())
                       .withSizeKeepingCentre(10.f, 10.f);
         juce::Path p;
+        if (glyph == Glyph::Heart)
+        {
+            auto hb = gb.expanded(2.5f, 2.f);
+            g.setColour(on ? accent : col);
+            if (on)
+                g.fillPath(draw::heart(hb));
+            else
+                g.strokePath(draw::heart(hb), juce::PathStrokeType(1.5f));
+            g.setColour(col);
+        }
         switch (glyph)
         {
         case Glyph::Prev:

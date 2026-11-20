@@ -54,6 +54,9 @@ class DeasynthEditor : public juce::AudioProcessorEditor,
     void showSaveDialog();
     void showAbout(bool show);
     void showMainMenu();
+    void showNotice(const juce::String &title, const juce::String &message);
+    /** Mark or unmark the loaded patch as a favourite. */
+    void toggleCurrentFavorite();
     /** The drop-down under the patch name: categories, each opening onto its patches. */
     void showPatchMenu();
     /** Library index of the patch that is loaded, or -1 if the sound is not from the library. */
@@ -84,7 +87,7 @@ class DeasynthEditor : public juce::AudioProcessorEditor,
     std::unique_ptr<deasynth::FlatButton> pageTabs[numPages];
     std::unique_ptr<deasynth::FlatButton> sceneButtons[2];
     std::unique_ptr<deasynth::FlatButton> presetName, prevPreset, nextPreset, savePreset, menuButton;
-    std::unique_ptr<deasynth::FlatButton> browseButton;
+    std::unique_ptr<deasynth::FlatButton> browseButton, favoriteButton;
     std::unique_ptr<deasynth::ScopeDisplay> scope;
     juce::Rectangle<int> hintArea, statusArea;
     juce::String hint, stickyHint;

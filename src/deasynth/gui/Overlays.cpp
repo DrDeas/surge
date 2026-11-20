@@ -8,6 +8,7 @@
 
 #include "Overlays.h"
 #include "DeasynthEditor.h"
+#include "../DeasynthProcessor.h"
 #include "version.h"
 
 namespace deasynth
@@ -247,9 +248,16 @@ struct PresetBrowser::CategoryModel : juce::ListBoxModel
             g.setColour(theme::osc.withAlpha(0.18f));
             g.fillRoundedRectangle(4.f, 1.f, (float)w - 8.f, (float)h - 2.f, 5.f);
         }
+        int textX = 14;
+        if (e.category == -3)
+        {
+            g.setColour(theme::shaper);
+            g.fillPath(draw::heart(juce::Rectangle<float>(14.f, (float)h * 0.5f - 5.5f, 12.f, 11.f)));
+            textX = 34;
+        }
         g.setFont(theme::font(13.5f, sel));
         g.setColour(sel ? theme::text : theme::textDim);
-        g.drawFittedText(e.label, 14, 0, w - 64, h, juce::Justification::centredLeft, 1, 0.8f);
+        g.drawFittedText(e.label, textX, 0, w - 50 - textX, h, juce::Justification::centredLeft, 1, 0.8f);
         g.setFont(theme::font(11.f));
         g.setColour(theme::textFaint);
         g.drawText(juce::String(e.count), w - 50, 0, 38, h, juce::Justification::centredRight);
@@ -277,9 +285,23 @@ struct PresetBrowser::PatchModel : juce::ListBoxModel
             g.setColour(theme::osc.withAlpha(0.18f));
             g.fillRoundedRectangle(4.f, 1.f, (float)w - 8.f, (float)h - 2.f, 5.f);
         }
+        // the heart at the left of each row marks, and toggles, a favourite
+        const bool fav = owner.ctx.proc.favorites.contains(p);
+        const auto heart = draw::heart(juce::Rectangle<float>(13.f, (float)h * 0.5f - 6.f, 13.f, 12.f));
+        if (fav)
+        {
+            g.setColour(theme::shaper);
+            g.fillPath(heart);
+        }
+        else
+        {
+            g.setColour(theme::textFaint.withAlpha(0.55f));
+            g.strokePath(heart, juce::PathStrokeType(1.2f));
+        }
+
         g.setFont(theme::font(13.5f, current));
         g.setColour(current ? theme::osc : theme::text);
-        g.drawFittedText(p.name, 14, 0, w / 2, h, juce::Justification::centredLeft, 1, 0.8f);
+        g.drawFittedText(p.name, heartColumn, 0, w / 2 - heartColumn, h, juce::Justification::centredLeft, 1, 0.8f);
 
         if (p.category >= 0 && p.category < (int)storage.patch_category.size())
         {
@@ -291,12 +313,19 @@ struct PresetBrowser::PatchModel : juce::ListBoxModel
                              w / 2 + 20, 0, w / 2 - 34, h, juce::Justification::centredRight, 1, 0.8f);
         }
     }
-    void listBoxItemClicked(int row, const juce::MouseEvent &) override
+    void listBoxItemClicked(int row, const juce::MouseEvent &e) override
     {
-        owner.choosePatchRow(row);
+        if (e.x < heartColumn)
+            owner.toggleFavoriteRow(row);
+        else
+            owner.choosePatchRow(row);
     }
+    juce::String getTooltipForRow(int) override { return {}; }
+    static constexpr int heartColumn = 36;
     void listBoxItemDoubleClicked(int row, const juce::MouseEvent &e) override
     {
+        if (e.x < heartColumn)
+            return; // a second click on the heart is a second toggle, not "load and close"
         listBoxItemClicked(row, e);
         owner.editor.showBrowser(false);
     }
@@ -344,6 +373,14 @@ void PresetBrowser::rebuild()
     auto &storage = ctx.synth->storage;
     categories.clear();
     categories.push_back({-1, "All patches", (int)storage.patch_list.size()});
+    {
+        auto &favs = ctx.proc.favorites;
+        favs.reload(); // another window or instance may have changed them
+        int n = 0;
+        for (const auto &p : storage.patch_list)
+            n += favs.contains(p) ? 1 : 0;
+        categories.push_back({-3, "Favorites", n});
+    }
 
     std::vector<int> direct(storage.patch_category.size(), 0);
     for (const auto &p : storage.patch_list)
@@ -421,6 +458,10 @@ void PresetBrowser::rebuildPatches()
         {
             continue;
         }
+        else if (cat == -3 && !ctx.proc.favorites.contains(p))
+        {
+            continue;
+        }
         patches.push_back(id);
     }
     patchList.updateContent();
@@ -445,6 +486,39 @@ int PresetBrowser::selectedPatchRow() const
 {
     auto it = std::find(patches.begin(), patches.end(), selectedPatchId);
     return it == patches.end() ? -1 : (int)(it - patches.begin());
+}
+
+void PresetBrowser::toggleFavoriteRow(int row)
+{
+    if (row < 0 || row >= (int)patches.size())
+        return;
+    auto &storage = ctx.synth->storage;
+    const int id = patches[(size_t)row];
+    if (id < 0 || id >= (int)storage.patch_list.size())
+        return;
+    if (!ctx.proc.favorites.toggle(storage.patch_list[(size_t)id]))
+    {
+        editor.showNotice("Favorites", "The favourites list could not be saved to\n" +
+                                           ctx.proc.favorites.getFile().getFullPathName());
+        return;
+    }
+
+    // update the Favorites count in place; rows are left where they are, so a patch just
+    // unmarked while looking at Favorites stays visible (and can be marked again) until
+    // the list is next rebuilt
+    for (auto &c : categories)
+    {
+        if (c.category == -3)
+        {
+            c.count = 0;
+            for (const auto &p : storage.patch_list)
+                c.count += ctx.proc.favorites.contains(p) ? 1 : 0;
+        }
+    }
+    categoryList.repaint();
+    patchList.repaint();
+    editor.context().structureChanged();
+    search.grabKeyboardFocus();
 }
 
 void PresetBrowser::choosePatchRow(int row)
@@ -556,10 +630,14 @@ void PresetBrowser::paint(juce::Graphics &g)
     }
     else if (patches.empty())
     {
+        const bool favs = search.getText().trim().isEmpty() && !categories.empty() &&
+                          categories[(size_t)selectedCategoryRow].category == -3;
         g.setColour(theme::textFaint);
         g.setFont(theme::font(13.f));
-        g.drawFittedText("Nothing matches that search.", lists.withTrimmedLeft(314),
-                         juce::Justification::centred, 1);
+        g.drawFittedText(favs ? "No favorites yet. Click the heart beside any patch, or the heart in the "
+                                "header, to add the ones you like."
+                              : "Nothing matches that search.",
+                         lists.withTrimmedLeft(314).reduced(60, 0), juce::Justification::centred, 3);
     }
 }
 

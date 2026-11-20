@@ -139,6 +139,12 @@ down arrow keys (and Page Up / Page Down) move through the list and load each pa
 go, Return closes the browser on the one you are on, and Escape closes it too. The
 arrow-into-tray button saves.
 
+**Favorites.** The heart in the header marks or unmarks the loaded patch, and every row in
+the browser has its own heart. Favorites appear as a category at the top of the browser and
+as the first entry of the drop-down. They are kept in `Favorites.txt` in your Deasynth
+documents folder, so the app and every plugin instance share them and reinstalling the
+factory library does not lose them.
+
 **Modulate strip.** Every modulation source: velocity, key tracking, aftertouch, wheels, the
 two envelopes, six voice LFOs, six scene LFOs, eight macros, random and alternate. A dot on a
 source means it is in use.

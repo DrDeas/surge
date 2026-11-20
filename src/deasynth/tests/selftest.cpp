@@ -496,6 +496,53 @@ void testState()
     }
 }
 
+void testFavorites()
+{
+    std::cout << "Favorites" << std::endl;
+    auto dir = juce::File::getSpecialLocation(juce::File::tempDirectory)
+                   .getChildFile("deasynth-selftest-" + juce::String(juce::Random::getSystemRandom().nextInt(1 << 30)));
+    dir.createDirectory();
+    auto file = dir.getChildFile("Favorites.txt");
+
+    Patch factory, third, outside;
+    factory.path = fs::path("/somewhere/Deasynth/patches_factory/Basses/Sub 1.fxp");
+    third.path = fs::path("/somewhere/Deasynth/patches_3rdparty/A.Liv/Keys/Bell.fxp");
+    outside.path = fs::path("/elsewhere/Random.fxp");
+
+    {
+        deasynth::Favorites f;
+        f.attach(file);
+        check(f.count() == 0 && !f.contains(factory), "starts empty");
+        check(f.keyFor(factory) == "factory/Basses/Sub 1.fxp", "factory patches are identified within their library");
+        check(f.keyFor(third) == "3rdparty/A.Liv/Keys/Bell.fxp", "third party patches likewise");
+        check(f.set(factory, true) && f.set(third, true), "patches can be marked");
+        check(f.contains(factory) && f.contains(third) && f.count() == 2, "marked patches are favorites");
+        check(!f.set(outside, true) && !f.contains(outside), "a file outside every library is refused");
+    }
+    {
+        deasynth::Favorites again;
+        again.attach(file);
+        check(again.contains(factory) && again.contains(third), "favorites survive a restart");
+
+        // the same patch reached through a different install location is the same favorite
+        Patch moved;
+        moved.path = fs::path("/Library/Application Support/Deasynth/patches_factory/Basses/Sub 1.fxp");
+        check(again.contains(moved), "favorites follow the library if it moves");
+
+        // two instances: a change by one must not be undone by the other
+        deasynth::Favorites other;
+        other.attach(file);
+        check(other.toggle(third) && !other.contains(third), "a patch can be unmarked");
+        Patch extra;
+        extra.path = fs::path("/x/patches_factory/Leads/Bright.fxp");
+        check(again.set(extra, true), "a second instance can mark another");
+        other.reload();
+        check(other.contains(extra) && other.contains(factory) && !other.contains(third),
+              "instances do not overwrite each other's changes");
+    }
+    dir.deleteRecursively();
+}
+
 void testParameters()
 {
     std::cout << "Host parameters" << std::endl;
@@ -653,6 +700,7 @@ int main(int argc, char **argv)
     testAnalogStage();
     testVintage();
     testState();
+    testFavorites();
     testParameters();
     testEditor(argc > 1 ? juce::String(argv[1]) : juce::String());
 

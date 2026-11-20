@@ -15,6 +15,7 @@
 #include "SurgeSynthesizer.h"
 #include "SurgeStorage.h"
 #include "dsp/AnalogStage.h"
+#include "Favorites.h"
 
 #include "juce_audio_processors/juce_audio_processors.h"
 #include "juce_audio_utils/juce_audio_utils.h"
@@ -150,6 +151,9 @@ class DeasynthProcessor : public juce::AudioProcessor,
     std::atomic<float> outputPeak[2]{};
 
     std::vector<DeasynthMacroParam *> macroParams;
+
+    /** Patches the user has marked. Shared by every window of this instance; message thread. */
+    deasynth::Favorites favorites;
 
     /** Where the editor last was, so reopening the window comes back to the same place. */
     struct EditorState
