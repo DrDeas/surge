@@ -13,6 +13,7 @@
  *
  *   deasynth-selftest [directory to write page snapshots into]
  *   deasynth-selftest --write-patches <directory>     regenerate the starter patches
+ *   deasynth-selftest --render-demo <directory>       render the demo film's frames and sound
  */
 
 #include "../DeasynthProcessor.h"
@@ -686,13 +687,47 @@ void testEditor(const juce::String &snapshotDir)
 } // namespace
 
 int writeDeasynthPatches(const juce::String &directory); // presetgen.cpp
+int renderDeasynthDemo(const juce::String &directory, double from, double to); // demovideo.cpp
+
+#if JUCE_LINUX
+#include <X11/Xlib.h>
+/*
+ * The demo renderer needs a real window, and on a bare X server (xvfb with no window manager
+ * running) JUCE cannot create one: it looks up the standard window-manager atoms without
+ * creating them, finds nothing, and the server rejects the window. A window manager would
+ * have created them; here we do. The connection is left open so the server keeps them.
+ */
+static void createWindowManagerAtoms()
+{
+    if (auto *display = XOpenDisplay(nullptr))
+    {
+        for (auto *name :
+             {"WM_PROTOCOLS", "WM_TAKE_FOCUS", "WM_DELETE_WINDOW", "WM_CHANGE_STATE", "WM_STATE",
+              "_NET_WM_PID", "_NET_WM_PING", "_NET_WM_NAME", "_NET_WM_ICON", "_NET_WM_USER_TIME",
+              "_NET_WM_WINDOW_TYPE", "_NET_WM_WINDOW_TYPE_NORMAL", "_NET_WM_WINDOW_TYPE_COMBO",
+              "_NET_WM_STATE", "_NET_WM_STATE_HIDDEN", "_NET_WM_STATE_FULLSCREEN",
+              "_NET_WM_STATE_ABOVE", "_NET_WM_MOVERESIZE", "_NET_WM_ALLOWED_ACTIONS",
+              "_NET_FRAME_EXTENTS", "_NET_WORKAREA", "_NET_ACTIVE_WINDOW", "_NET_WM_WINDOW_OPACITY",
+              "_MOTIF_WM_HINTS", "_WIN_HINTS", "KWM_WIN_DECORATION",
+              "_KDE_NET_WM_WINDOW_TYPE_OVERRIDE", "UTF8_STRING"})
+            XInternAtom(display, name, False);
+        XSync(display, False);
+    }
+}
+#endif
 
 int main(int argc, char **argv)
 {
+#if JUCE_LINUX
+    if (argc > 2 && juce::String(argv[1]) == "--render-demo")
+        createWindowManagerAtoms();
+#endif
     juce::ScopedJuceInitialiser_GUI gui;
 
     if (argc > 2 && juce::String(argv[1]) == "--write-patches")
         return writeDeasynthPatches(argv[2]);
+    if (argc > 2 && juce::String(argv[1]) == "--render-demo")
+        return renderDeasynthDemo(argv[2], argc > 3 ? atof(argv[3]) : 0.0, argc > 4 ? atof(argv[4]) : 1e9);
 
     testAudio();
     testOscillators();

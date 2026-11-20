@@ -154,7 +154,7 @@ Drag a knob and a ring in the source's colour shows how far the source will move
 the source again (or press Escape) to finish. Double-click a knob while armed to remove that
 routing. Right-click a source to clear everything it does.
 
-**Synth page.** Three oscillators with a live picture of what each is producing (twelve
+**Synth page.** Three oscillators with a live picture of what each is producing (eleven
 algorithms: classic analog shapes, wavetable, FM, string model, and more; click the picture
 of a wavetable oscillator to choose a table). The mixer, with ring modulators, noise, FM and
 **Drive**, which is the level into the filters. Two filters with their measured frequency

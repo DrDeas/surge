@@ -129,6 +129,7 @@ if(DEASYNTH_BUILD_SELFTEST)
   target_sources(deasynth-selftest PRIVATE
     tests/selftest.cpp
     tests/presetgen.cpp
+    tests/demovideo.cpp
     DeasynthProcessor.cpp
     Favorites.cpp
     gui/DeasynthEditor.cpp
@@ -154,6 +155,11 @@ if(DEASYNTH_BUILD_SELFTEST)
     deasynth-binary
     sst-filters-extras
   )
+  if(UNIX AND NOT APPLE)
+    # only for the demo renderer, which prepares a bare X server itself (see selftest.cpp)
+    find_package(X11 REQUIRED)
+    target_link_libraries(deasynth-selftest PRIVATE ${X11_X11_LIB})
+  endif()
   target_include_directories(deasynth-selftest PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
   set_target_properties(deasynth-selftest PROPERTIES RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
   if(SURGE_BUILD_TESTRUNNER)
