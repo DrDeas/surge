@@ -970,7 +970,7 @@ void ValueKnob::paint(juce::Graphics &g)
 
     juce::String text = label.toUpperCase();
     if (hovering || dragging)
-        text = format ? format(v) : juce::String(v * 100.f, 0) + " %";
+        text = format ? format(v) : juce::String(juce::roundToInt(v * 100.f)) + " %";
 
     g.setColour((hovering || dragging) ? theme::text : theme::textDim);
     g.setFont((hovering || dragging) ? theme::font(11.f, true) : theme::labelFont(9.5f));

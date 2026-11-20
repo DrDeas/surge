@@ -278,7 +278,7 @@ DeasynthProcessor::DeasynthProcessor()
         std::make_unique<juce::AudioProcessorParameterGroup>("character", "Character", "|");
     auto pct = juce::AudioParameterFloatAttributes()
                    .withStringFromValueFunction(
-                       [](float v, int) { return juce::String(v * 100.f, 0) + " %"; })
+                       [](float v, int) { return juce::String(juce::roundToInt(v * 100.f)) + " %"; })
                    .withValueFromStringFunction(
                        [](const juce::String &t) { return t.getFloatValue() * 0.01f; });
     auto vint = std::make_unique<juce::AudioParameterFloat>(

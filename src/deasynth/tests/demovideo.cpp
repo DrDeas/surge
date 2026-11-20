@@ -682,6 +682,18 @@ struct Demo : juce::Timer
         cx = a->cx + (b->cx - a->cx) * u;
         cy = a->cy + (b->cy - a->cy) * u;
         zoom = a->zoom + (b->zoom - a->zoom) * u;
+
+        // Keep the frame on the window: never pan so far that empty backdrop shows at an
+        // edge, unless the whole window fits, in which case it is simply centred.
+        const float margin = 28.f / zoom;
+        const float halfW = outW * 0.5f / zoom, above = 500.f / zoom, below = (outH - 500.f) / zoom;
+        const float W = (float)DeasynthEditor::baseWidth, H = (float)DeasynthEditor::baseHeight;
+        cx = (2.f * halfW >= W + 2.f * margin) ? W * 0.5f
+                                               : juce::jlimit(halfW - margin, W - halfW + margin, cx);
+        // the captions cover the bottom of the frame, so the window may run under them
+        const float lowest = H - below + 150.f / zoom;
+        cy = (above + below >= H + 2.f * margin) ? juce::jmin(cy, H * 0.5f + 40.f / zoom)
+                                                 : juce::jlimit(above - margin, juce::jmax(above - margin, lowest), cy);
     }
 
     static float fade(double t, double t0, double t1, double edge = 0.45)
@@ -819,7 +831,8 @@ struct Demo : juce::Timer
         };
         card(now < 4.6 ? 1.f : 1.f - ease((float)((now - 4.6) / 1.5)), "Analog soul. Modern engine.", "",
              ease((float)(now / 5.0)));
-        card(ease((float)((now - 84.4) / 1.3)), "Standalone   \xc2\xb7   Audio Unit   \xc2\xb7   VST3",
+        card(ease((float)((now - 84.4) / 1.3)),
+             juce::String::fromUTF8("Standalone   \xc2\xb7   Audio Unit   \xc2\xb7   VST3"),
              "Free software, built on the open source Surge XT engine.", ease((float)((now - 84.4) / 5.0)));
 
         // fade from and to black
