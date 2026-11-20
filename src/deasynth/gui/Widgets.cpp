@@ -1065,7 +1065,9 @@ void FlatButton::paint(juce::Graphics &g)
     auto b = getLocalBounds().toFloat().reduced(0.5f);
     const float radius = std::min(6.f, b.getHeight() * 0.5f);
 
-    if (on)
+    // a quiet heart shows its state by filling in, not with a lit box around it
+    const bool boxed = on && !(quiet && glyph == Glyph::Heart);
+    if (boxed)
     {
         g.setColour(accent.withAlpha(down ? 0.34f : 0.2f));
         g.fillRoundedRectangle(b, radius);
@@ -1090,6 +1092,7 @@ void FlatButton::paint(juce::Graphics &g)
     g.setColour(col);
 
     auto content = getLocalBounds().reduced(just == juce::Justification::centred ? 3 : 9, 0);
+    content.removeFromLeft(leftInset);
 
     if (glyph != Glyph::None)
     {

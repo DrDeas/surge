@@ -257,6 +257,8 @@ class FlatButton : public juce::Component, public juce::SettableTooltipClient
         }
     }
     void setJustification(juce::Justification j) { just = j; }
+    /** Keep the text clear of something placed over the button's left edge. */
+    void setLeftInset(int px) { leftInset = px; }
     void setFontSize(float s) { fontSize = s; }
 
     void paint(juce::Graphics &g) override;
@@ -279,6 +281,7 @@ class FlatButton : public juce::Component, public juce::SettableTooltipClient
     Glyph glyph{Glyph::None};
     juce::Justification just{juce::Justification::centred};
     float fontSize{12.f};
+    int leftInset{0};
     bool on{false}, hovering{false}, down{false}, quiet{false}, marker{false};
 };
 

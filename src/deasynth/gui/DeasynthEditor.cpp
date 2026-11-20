@@ -128,6 +128,10 @@ DeasynthEditor::DeasynthEditor(DeasynthProcessor &p)
     menuButton->onClick = [this]() { showMainMenu(); };
     for (auto *b : {presetName.get(), prevPreset.get(), nextPreset.get(), savePreset.get(), menuButton.get()})
         root->addAndMakeVisible(*b);
+    // drawn over the name box, and clicked before it: the heart must not open the patch menu
+    presetName->setLeftInset(24);
+    favoriteButton->setQuiet(true);
+    favoriteButton->toFront(false);
 
     scope = std::make_unique<ScopeDisplay>(ctx);
     root->addAndMakeVisible(*scope);
@@ -257,11 +261,11 @@ void DeasynthEditor::layoutRoot()
 
     browseButton->setBounds(header.removeFromLeft(30));
     header.removeFromLeft(5);
-    favoriteButton->setBounds(header.removeFromLeft(28));
-    header.removeFromLeft(5);
     prevPreset->setBounds(header.removeFromLeft(24));
     header.removeFromLeft(3);
-    presetName->setBounds(header.removeFromLeft(204));
+    presetName->setBounds(header.removeFromLeft(237));
+    // the favourite heart sits inside the name box, at its left end
+    favoriteButton->setBounds(presetName->getBounds().removeFromLeft(30).reduced(2, 3));
     header.removeFromLeft(3);
     nextPreset->setBounds(header.removeFromLeft(24));
     header.removeFromLeft(6);
