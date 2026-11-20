@@ -346,21 +346,11 @@ void DeasynthEditor::paintRoot(juce::Graphics &g)
     g.setColour(theme::outline.withAlpha(0.6f));
     g.drawHorizontalLine(headerH - 1, 0.f, (float)baseWidth);
 
-    // wordmark: a small sine-into-saw glyph, then the name
-    {
-        juce::Path mark;
-        const float x0 = 18.f, cy = headerH * 0.5f;
-        mark.startNewSubPath(x0, cy);
-        mark.cubicTo(x0 + 4.f, cy - 13.f, x0 + 8.f, cy - 13.f, x0 + 12.f, cy);
-        mark.lineTo(x0 + 12.f, cy + 9.f);
-        mark.lineTo(x0 + 24.f, cy - 9.f);
-        mark.lineTo(x0 + 24.f, cy);
-        g.setColour(theme::osc);
-        g.strokePath(mark, juce::PathStrokeType(2.4f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
-        g.setColour(theme::text);
-        g.setFont(theme::font(19.f, true).withExtraKerningFactor(0.2f));
-        g.drawText("DEASYNTH", 52, 0, 130, headerH, juce::Justification::centredLeft);
-    }
+    // the logo, then the name
+    theme::drawLogo(g, juce::Rectangle<float>(12.f, 6.f, 40.f, (float)headerH - 12.f));
+    g.setColour(theme::text);
+    g.setFont(theme::font(19.f, true).withExtraKerningFactor(0.2f));
+    g.drawText("DEASYNTH", 58, 0, 126, headerH, juce::Justification::centredLeft);
 
     if (!ctx.synth)
     {

@@ -710,6 +710,7 @@ void AboutPanel::paint(juce::Graphics &g)
     g.drawRoundedRectangle(card.toFloat().reduced(0.5f), 12.f, 1.f);
 
     auto b = card.reduced(34, 28);
+    theme::drawLogo(g, juce::Rectangle<float>((float)b.getRight() - 84.f, (float)b.getY() - 4.f, 84.f, 92.f));
     g.setColour(theme::text);
     g.setFont(theme::font(30.f, true).withExtraKerningFactor(0.16f));
     g.drawText("DEASYNTH", b.removeFromTop(40), juce::Justification::centredLeft);

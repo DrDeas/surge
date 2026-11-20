@@ -48,6 +48,9 @@ const juce::Colour fx{0xff5fd0df};     // cyan
 const juce::Colour voice{0xffc9ccd3};  // steel
 const juce::Colour danger{0xffe5484d};
 
+/** Draw the Deasynth logo (transparent background) fitted inside the given area. */
+void drawLogo(juce::Graphics &g, juce::Rectangle<float> area);
+
 juce::Typeface::Ptr regularTypeface();
 juce::Typeface::Ptr boldTypeface();
 

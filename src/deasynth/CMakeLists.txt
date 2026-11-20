@@ -27,6 +27,10 @@ juce_add_binary_data(deasynth-binary
   SOURCES
   ${CMAKE_SOURCE_DIR}/resources/fonts/Lato-Regular.ttf
   ${CMAKE_SOURCE_DIR}/resources/fonts/Lato-Bold.ttf
+  # The logo as drawn in the interface: resources/deasynth/DeasynthLogo.svg without its
+  # background tile. DeasynthIcon.png (the app icon) is rendered from DeasynthLogo.svg by
+  # scripts/deasynth/render-icon.sh; rerun it after changing the logo.
+  ${CMAKE_SOURCE_DIR}/resources/deasynth/DeasynthMark.svg
 )
 
 juce_add_plugin(${PROJECT_NAME}

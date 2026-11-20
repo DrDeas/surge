@@ -13,6 +13,15 @@ namespace deasynth
 {
 namespace theme
 {
+void drawLogo(juce::Graphics &g, juce::Rectangle<float> area)
+{
+    // parsed once; every editor shares it and only ever draws it from the message thread
+    static const std::unique_ptr<juce::Drawable> logo = juce::Drawable::createFromImageData(
+        DeasynthBinary::DeasynthMark_svg, DeasynthBinary::DeasynthMark_svgSize);
+    if (logo)
+        logo->drawWithin(g, area, juce::RectanglePlacement::centred, 1.f);
+}
+
 juce::Typeface::Ptr regularTypeface()
 {
     static juce::Typeface::Ptr tf = juce::Typeface::createSystemTypefaceFor(

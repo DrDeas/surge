@@ -19,6 +19,7 @@ by side; they keep separate settings, patches and plugin identities.
 * [Using it](#using-it)
 * [What is new, and what is the engine's](#what-is-new-and-what-is-the-engines)
 * [How the code is laid out](#how-the-code-is-laid-out)
+* [The logo](#the-logo)
 * [Tests](#tests)
 * [Licence and names](#licence-and-names)
 
@@ -240,6 +241,20 @@ Three ideas carry most of it:
 
 The window is designed at 1280 x 800 and scaled as a whole, so it resizes freely with a fixed
 aspect ratio.
+
+## The logo
+
+`resources/deasynth/DeasynthLogo.svg` is the logo. Two things are made from it:
+
+* `resources/deasynth/DeasynthMark.svg`, the same artwork without the background tile. It is
+  embedded in the plugin and drawn in the header and the About panel, so the interface shows
+  the logo on a transparent background at any window size.
+* `resources/deasynth/DeasynthIcon.png`, the app icon, which keeps the tile. Regenerate it
+  with `scripts/deasynth/render-icon.sh` after changing the logo.
+
+To change the logo, replace `DeasynthLogo.svg`, make the matching `DeasynthMark.svg` (delete
+the background `<rect>` and, if you like, tighten the `viewBox` to the artwork), run
+`render-icon.sh`, and rebuild.
 
 ## Tests
 
