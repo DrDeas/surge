@@ -834,7 +834,7 @@ struct Demo : juce::Timer
              ease((float)(now / 5.0)));
         card(ease((float)((now - 84.4) / 1.3)),
              juce::String::fromUTF8("Standalone   \xc2\xb7   Audio Unit   \xc2\xb7   VST3"),
-             "Free software, built on the open source Surge XT engine.", ease((float)((now - 84.4) / 5.0)));
+             "", ease((float)((now - 84.4) / 5.0)));
 
         // fade from and to black
         const float black = std::max(1.f - ease((float)(now / 0.7)), ease((float)((now - 89.1) / 0.85)));
