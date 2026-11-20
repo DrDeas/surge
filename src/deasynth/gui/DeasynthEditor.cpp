@@ -100,8 +100,13 @@ DeasynthEditor::DeasynthEditor(DeasynthProcessor &p)
     presetName->setFontSize(14.5f);
     presetName->setJustification(juce::Justification::centredLeft);
     presetName->setGlyph(FlatButton::Glyph::Dropdown);
-    presetName->setTooltip("Browse patches");
-    presetName->onClick = [this]() { showBrowser(true); };
+    presetName->setTooltip("Choose a patch by category");
+    presetName->onClick = [this]() { showPatchMenu(); };
+    browseButton = std::make_unique<FlatButton>();
+    browseButton->setGlyph(FlatButton::Glyph::Library);
+    browseButton->setTooltip("Open the patch browser (search, and step through with the arrow keys)");
+    browseButton->onClick = [this]() { showBrowser(true); };
+    root->addAndMakeVisible(*browseButton);
     prevPreset = std::make_unique<FlatButton>();
     prevPreset->setGlyph(FlatButton::Glyph::Prev);
     prevPreset->setTooltip("Previous patch");
@@ -246,9 +251,11 @@ void DeasynthEditor::layoutRoot()
     sceneButtons[1]->setBounds(header.removeFromLeft(30));
     header.removeFromLeft(18);
 
+    browseButton->setBounds(header.removeFromLeft(30));
+    header.removeFromLeft(5);
     prevPreset->setBounds(header.removeFromLeft(26));
     header.removeFromLeft(3);
-    presetName->setBounds(header.removeFromLeft(260));
+    presetName->setBounds(header.removeFromLeft(226));
     header.removeFromLeft(3);
     nextPreset->setBounds(header.removeFromLeft(26));
     header.removeFromLeft(6);
@@ -501,6 +508,137 @@ void DeasynthEditor::showAbout(bool show)
     about->setVisible(show);
     if (show)
         about->toFront(true);
+}
+
+int DeasynthEditor::currentLibraryPatch() const
+{
+    // The engine keeps the index of the last library patch it loaded even after the sound
+    // has been replaced (by Initialise, or by a session's own state), so check the name too.
+    auto &storage = ctx.synth->storage;
+    const int id = ctx.synth->patchid;
+    if (id < 0 || id >= (int)storage.patch_list.size())
+        return -1;
+    return storage.patch_list[(size_t)id].name == ctx.patch().name ? id : -1;
+}
+
+void DeasynthEditor::showPatchMenu()
+{
+    auto &storage = ctx.synth->storage;
+    const int current = currentLibraryPatch();
+    const int currentCategory = (current >= 0 && current < (int)storage.patch_list.size())
+                                    ? storage.patch_list[(size_t)current].category
+                                    : -1;
+
+    juce::PopupMenu menu;
+    menu.addItem("Open patch browser...", [this]() { showBrowser(true); });
+    menu.addSeparator();
+
+    if (storage.patch_list.empty())
+    {
+        menu.addItem(-1, "No patches installed", false);
+    }
+
+    // patches of each category, in the library's own order
+    std::vector<std::vector<int>> byCategory(storage.patch_category.size());
+    for (int id : storage.patchOrdering)
+    {
+        if (id < 0 || id >= (int)storage.patch_list.size())
+            continue;
+        const int c = storage.patch_list[(size_t)id].category;
+        if (c >= 0 && c < (int)byCategory.size())
+            byCategory[(size_t)c].push_back(id);
+    }
+
+    auto patchesMenu = [&](int category) {
+        juce::PopupMenu sub;
+        int n = 0;
+        for (int id : byCategory[(size_t)category])
+        {
+            if (n > 0 && n % 34 == 0)
+                sub.addColumnBreak();
+            sub.addItem(id + 1, storage.patch_list[(size_t)id].name, true, id == current);
+            ++n;
+        }
+        return sub;
+    };
+
+    // Factory categories sit at the top level. Third party and user libraries have many
+    // more, so they get a level of their own: by author for third party, by folder for user.
+    juce::PopupMenu thirdParty, user;
+    std::vector<std::pair<juce::String, juce::PopupMenu>> authors;
+    bool thirdPartyHasCurrent = false, userHasCurrent = false;
+
+    for (int oi = 0; oi < (int)storage.patchCategoryOrdering.size(); ++oi)
+    {
+        const int c = storage.patchCategoryOrdering[(size_t)oi];
+        if (c < 0 || c >= (int)byCategory.size() || byCategory[(size_t)c].empty())
+            continue;
+        const auto name = juce::String(storage.patch_category[(size_t)c].name).replaceCharacter('\\', '/');
+        const bool ticked = c == currentCategory;
+
+        if (oi >= storage.firstUserCategory)
+        {
+            user.addSubMenu(name.replace("/", "  /  "), patchesMenu(c), true, nullptr, ticked);
+            userHasCurrent = userHasCurrent || ticked;
+        }
+        else if (oi >= storage.firstThirdPartyCategory)
+        {
+            const auto author = name.upToFirstOccurrenceOf("/", false, false);
+            auto rest = name.fromFirstOccurrenceOf("/", false, false).replace("/", "  /  ");
+            if (rest.isEmpty())
+                rest = "Patches";
+            auto it = std::find_if(authors.begin(), authors.end(),
+                                   [&](const auto &a) { return a.first == author; });
+            if (it == authors.end())
+            {
+                authors.emplace_back(author, juce::PopupMenu());
+                it = authors.end() - 1;
+            }
+            it->second.addSubMenu(rest, patchesMenu(c), true, nullptr, ticked);
+            if (ticked)
+                thirdPartyHasCurrent = true;
+        }
+        else
+        {
+            menu.addSubMenu(name.replace("/", "  /  "), patchesMenu(c), true, nullptr, ticked);
+        }
+    }
+
+    if (!authors.empty())
+    {
+        int n = 0;
+        for (auto &[author, sub] : authors)
+        {
+            if (n > 0 && n % 34 == 0)
+                thirdParty.addColumnBreak();
+            bool has = false;
+            if (currentCategory >= 0)
+                has = juce::String(storage.patch_category[(size_t)currentCategory].name)
+                          .replaceCharacter('\\', '/')
+                          .upToFirstOccurrenceOf("/", false, false) == author &&
+                      thirdPartyHasCurrent;
+            thirdParty.addSubMenu(author, sub, true, nullptr, has);
+            ++n;
+        }
+        menu.addSeparator();
+        menu.addSubMenu("Third party", thirdParty, true, nullptr, thirdPartyHasCurrent);
+    }
+    if (user.getNumItems() > 0)
+    {
+        if (authors.empty())
+            menu.addSeparator();
+        menu.addSubMenu("My patches", user, true, nullptr, userHasCurrent);
+    }
+
+    juce::Component::SafePointer<DeasynthEditor> safe(this);
+    menu.showMenuAsync(juce::PopupMenu::Options()
+                           .withTargetComponent(presetName.get())
+                           .withParentComponent(root.get())
+                           .withMinimumWidth(presetName->getWidth()),
+                       [safe](int r) {
+                           if (safe && r > 0)
+                               safe->loadPatch(r - 1);
+                       });
 }
 
 void DeasynthEditor::showMainMenu()

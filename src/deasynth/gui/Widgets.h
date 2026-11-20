@@ -213,7 +213,8 @@ class FlatButton : public juce::Component, public juce::SettableTooltipClient
         Menu,
         Save,
         Close,
-        Dropdown
+        Dropdown,
+        Library
     };
 
     explicit FlatButton(const juce::String &text = {}, juce::Colour accent = theme::osc);

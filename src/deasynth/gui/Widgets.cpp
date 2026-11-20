@@ -1114,6 +1114,15 @@ void FlatButton::paint(juce::Graphics &g)
             p.lineTo(gb.getCentreX(), gb.getCentreY() + 2.5f);
             p.lineTo(gb.getRight() - 1.f, gb.getCentreY() - 2.f);
             break;
+        case Glyph::Library: // books on a shelf, the last one leaning
+            for (int i = 0; i < 3; ++i)
+            {
+                p.startNewSubPath(gb.getX() + (float)i * 2.6f, gb.getY());
+                p.lineTo(gb.getX() + (float)i * 2.6f, gb.getBottom());
+            }
+            p.startNewSubPath(gb.getX() + 7.2f, gb.getY() + 0.6f);
+            p.lineTo(gb.getRight(), gb.getBottom());
+            break;
         case Glyph::Save:
             p.startNewSubPath(gb.getCentreX(), gb.getY());
             p.lineTo(gb.getCentreX(), gb.getBottom() - 3.f);

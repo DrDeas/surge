@@ -128,9 +128,16 @@ The panel reads left to right in the order the sound is made, and each stage has
 colour, used for its knobs, its display and its modulation rings.
 
 **Header.** Three pages (Synth, Modulation, Effects); the layer switch (Deasynth holds two
-complete layers, A and B: right-click the switch to split or stack them); the patch name
-(click it to browse, arrows to step, the arrow-into-tray button to save); an oscilloscope
-and level meter; and the menu.
+complete layers, A and B: right-click the switch to split or stack them); the patch
+controls; an oscilloscope and level meter; and the menu.
+
+**Choosing patches.** Click the patch name for a drop-down of categories, each opening onto
+its patches; third party libraries are grouped by author and your own patches are under My
+patches. The arrows either side of the name step to the previous and next patch. The
+bookshelf button opens the browser, which adds search across everything: there, the up and
+down arrow keys (and Page Up / Page Down) move through the list and load each patch as you
+go, Return closes the browser on the one you are on, and Escape closes it too. The
+arrow-into-tray button saves.
 
 **Modulate strip.** Every modulation source: velocity, key tracking, aftertouch, wheels, the
 two envelopes, six voice LFOs, six scene LFOs, eight macros, random and alternate. A dot on a

@@ -271,7 +271,7 @@ struct PresetBrowser::PatchModel : juce::ListBoxModel
         if (id < 0 || id >= (int)storage.patch_list.size())
             return;
         const auto &p = storage.patch_list[(size_t)id];
-        const bool current = id == owner.ctx.synth->patchid;
+        const bool current = id == owner.selectedPatchId;
         if (current)
         {
             g.setColour(theme::osc.withAlpha(0.18f));
@@ -293,12 +293,7 @@ struct PresetBrowser::PatchModel : juce::ListBoxModel
     }
     void listBoxItemClicked(int row, const juce::MouseEvent &) override
     {
-        if (row >= 0 && row < (int)owner.patches.size())
-        {
-            owner.editor.loadPatch(owner.patches[(size_t)row]);
-            owner.patchList.repaint();
-            owner.search.grabKeyboardFocus();
-        }
+        owner.choosePatchRow(row);
     }
     void listBoxItemDoubleClicked(int row, const juce::MouseEvent &e) override
     {
@@ -325,6 +320,7 @@ PresetBrowser::PresetBrowser(DeasynthEditor &ed, EditorContext &c) : editor(ed),
     search.setIndents(10, 7);
     search.addListener(this);
     search.onEscapeKey = [this]() { editor.showBrowser(false); };
+    search.onNavigationKey = [this](const juce::KeyPress &k) { return handleNavigationKey(k); };
 
     close.setGlyph(FlatButton::Glyph::Close);
     close.setQuiet(true);
@@ -379,7 +375,7 @@ void PresetBrowser::rebuild()
         selectedCategoryRow = 0;
 
     // open on the category of the patch that is loaded, the first time
-    const int pid = ctx.synth->patchid;
+    const int pid = selectedPatchId;
     if (selectedCategoryRow == 0 && pid >= 0 && pid < (int)storage.patch_list.size())
     {
         const int cat = storage.patch_list[(size_t)pid].category;
@@ -436,17 +432,66 @@ void PresetBrowser::visibilityChanged()
 {
     if (isVisible())
     {
+        selectedPatchId = editor.currentLibraryPatch();
         rebuild();
         search.grabKeyboardFocus();
-        const int pid = ctx.synth->patchid;
-        auto it = std::find(patches.begin(), patches.end(), pid);
-        if (it != patches.end())
-            patchList.scrollToEnsureRowIsOnscreen((int)(it - patches.begin()));
+        const int row = selectedPatchRow();
+        if (row >= 0)
+            patchList.scrollToEnsureRowIsOnscreen(row);
     }
+}
+
+int PresetBrowser::selectedPatchRow() const
+{
+    auto it = std::find(patches.begin(), patches.end(), selectedPatchId);
+    return it == patches.end() ? -1 : (int)(it - patches.begin());
+}
+
+void PresetBrowser::choosePatchRow(int row)
+{
+    if (row < 0 || row >= (int)patches.size())
+        return;
+    selectedPatchId = patches[(size_t)row];
+    editor.loadPatch(selectedPatchId);
+    patchList.scrollToEnsureRowIsOnscreen(row);
+    patchList.repaint();
+    search.grabKeyboardFocus();
+}
+
+void PresetBrowser::stepSelection(int delta)
+{
+    if (patches.empty())
+        return;
+    const int current = selectedPatchRow();
+    // with nothing selected in this list, down starts at the top and up at the bottom
+    int row = current < 0 ? (delta > 0 ? 0 : (int)patches.size() - 1) : current + delta;
+    row = juce::jlimit(0, (int)patches.size() - 1, row);
+    if (row != current)
+        choosePatchRow(row);
+}
+
+bool PresetBrowser::handleNavigationKey(const juce::KeyPress &key)
+{
+    const int page = juce::jmax(1, patchList.getHeight() / juce::jmax(1, patchList.getRowHeight()) - 1);
+    if (key == juce::KeyPress::upKey)
+        stepSelection(-1);
+    else if (key == juce::KeyPress::downKey)
+        stepSelection(1);
+    else if (key == juce::KeyPress::pageUpKey)
+        stepSelection(-page);
+    else if (key == juce::KeyPress::pageDownKey)
+        stepSelection(page);
+    else if (key == juce::KeyPress::returnKey)
+        editor.showBrowser(false); // the selected patch is already loaded
+    else
+        return false;
+    return true;
 }
 
 bool PresetBrowser::keyPressed(const juce::KeyPress &key)
 {
+    if (handleNavigationKey(key))
+        return true;
     if (key == juce::KeyPress::escapeKey)
     {
         editor.showBrowser(false);

@@ -95,15 +95,36 @@ class PresetBrowser : public juce::Component, private juce::TextEditor::Listener
         int count;
     };
 
+    /** The search box keeps the keyboard, and hands the keys that move the list back to us. */
+    struct SearchBox : juce::TextEditor
+    {
+        std::function<bool(const juce::KeyPress &)> onNavigationKey;
+        bool keyPressed(const juce::KeyPress &key) override
+        {
+            if (onNavigationKey && onNavigationKey(key))
+                return true;
+            return juce::TextEditor::keyPressed(key);
+        }
+    };
+
     void textEditorTextChanged(juce::TextEditor &) override { rebuildPatches(); }
     void rebuildPatches();
     void selectCategory(int row);
+    /** Load the patch in a row of the list and show it selected. */
+    void choosePatchRow(int row);
+    /** Move the selection by a number of rows (arrow keys, page keys). */
+    void stepSelection(int delta);
+    bool handleNavigationKey(const juce::KeyPress &key);
+    int selectedPatchRow() const;
 
     DeasynthEditor &editor;
     EditorContext &ctx;
-    juce::TextEditor search;
+    SearchBox search;
     FlatButton close;
     juce::ListBox categoryList, patchList;
+    // The patch the browser considers selected. Tracked here rather than read from the
+    // engine, which loads on the audio thread and so reports the new patch a moment later.
+    int selectedPatchId{-1};
     std::unique_ptr<CategoryModel> categoryModel;
     std::unique_ptr<PatchModel> patchModel;
     std::vector<CategoryEntry> categories;
