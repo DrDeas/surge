@@ -20,6 +20,7 @@ by side; they keep separate settings, patches and plugin identities.
 * [What is new, and what is the engine's](#what-is-new-and-what-is-the-engines)
 * [How the code is laid out](#how-the-code-is-laid-out)
 * [The logo](#the-logo)
+* [The demo film](#the-demo-film)
 * [Tests](#tests)
 * [Licence and names](#licence-and-names)
 
@@ -268,6 +269,22 @@ aspect ratio.
 To change the logo, replace `DeasynthLogo.svg`, make the matching `DeasynthMark.svg` (delete
 the background `<rect>` and, if you like, tighten the `viewBox` to the artwork), run
 `render-icon.sh`, and rebuild.
+
+## The demo film
+
+`doc/media/deasynth-demo.mp4` is a 90 second demonstration, and it is generated, not
+recorded: `deasynth-selftest --render-demo` opens the real editor, operates it from a script
+(the same mouse events a person would produce: turning knobs, opening menus, dragging on
+displays), renders the instrument's own audio in step, and adds a camera, pointer, captions
+and title cards. To make it again after changing the interface:
+
+```bash
+scripts/deasynth/render-demo.sh
+```
+
+It needs ffmpeg, the factory library installed, and on Linux `xvfb-run`. The script of the
+film (what happens when, the captions, the music) is in `src/deasynth/tests/demovideo.cpp`.
+It has only been run on Linux.
 
 ## Tests
 
